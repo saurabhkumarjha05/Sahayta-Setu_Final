@@ -6,7 +6,7 @@
 
 An AI-assisted, location-aware, offline-first disaster-response coordination platform connecting **Citizens • Responders • NGOs • Authorities**.
 
-**Team Byte CodeX** · Build for Bharat · Domain: Disaster Management
+Lead of **Team Byte CodeX** · Build for Bharat · Domain: Disaster Management
 
 </div>
 
@@ -264,6 +264,7 @@ Designed for India-wide scale: **28 States and 8 Union Territories**, with State
 
 ## 🤝 Team
 
-**Byte CodeX**:
+**Byte CodeX**: Saurabh Kumar Jha And Team.
 
 ## 📄 License
+MIT License
