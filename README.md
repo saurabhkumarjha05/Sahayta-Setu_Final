@@ -6,7 +6,7 @@
 
 An AI-assisted, location-aware, offline-first disaster-response coordination platform connecting **Citizens • Responders • NGOs • Authorities**.
 
-**Team Byte CodeX** · Build With Bharat 4.0 / KCC · Domain: Disaster Management
+**Team Byte CodeX** · Build for Bharat · Domain: Disaster Management
 
 </div>
 
