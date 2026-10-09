@@ -1,0 +1,210 @@
+/**
+ * Sahayta Setu - Design System Tokens
+ * WCAG AA compliant colors, fluid typography, elevation, spacing and animations.
+ * Supports light, dark, and high-contrast themes via CSS custom properties.
+ */
+
+:root {
+  /* ================= COLOR TOKENS (LIGHT DEFAULT) ================= */
+  /* Emergency Red */
+  --color-emergency: #dc2626;
+  --color-emergency-hover: #b91c1c;
+  --color-emergency-surface: #fef2f2;
+  --color-emergency-border: #fecaca;
+  --color-emergency-contrast: #ffffff;
+
+  /* Safe Green */
+  --color-safe: #16a34a;
+  --color-safe-hover: #15803d;
+  --color-safe-surface: #f0fdf4;
+  --color-safe-border: #bbf7d0;
+  --color-safe-contrast: #ffffff;
+
+  /* Warning Amber */
+  --color-warning: #d97706;
+  --color-warning-hover: #b45309;
+  --color-warning-surface: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-warning-contrast: #1c1917;
+
+  /* Info Blue */
+  --color-info: #2563eb;
+  --color-info-hover: #1d4ed8;
+  --color-info-surface: #eff6ff;
+  --color-info-border: #bfdbfe;
+  --color-info-contrast: #ffffff;
+
+  /* Neutrals */
+  --color-bg-app: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-subtle: #f1f5f9;
+  --color-bg-muted: #e2e8f0;
+
+  --color-text-main: #0f172a;
+  --color-text-subtle: #334155;
+  --color-text-muted: #64748b;
+  --color-text-disabled: #94a3b8;
+
+  --color-border: #e2e8f0;
+  --color-border-subtle: #cbd5e1;
+  --color-border-strong: #94a3b8;
+
+  /* ================= ELEVATION & SHADOWS ================= */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-emergency: 0 0 0 4px rgba(220, 38, 38, 0.25), 0 10px 25px -5px rgba(220, 38, 38, 0.35);
+
+  /* ================= RADIUS ================= */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* ================= SPACING SCALE ================= */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ================= FLUID TYPOGRAPHY SCALE ================= */
+  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-size-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.8125rem);
+  --font-size-sm: clamp(0.8125rem, 0.78rem + 0.3vw, 0.875rem);
+  --font-size-base: clamp(0.9375rem, 0.9rem + 0.35vw, 1rem);
+  --font-size-lg: clamp(1.0625rem, 1rem + 0.4vw, 1.1875rem);
+  --font-size-xl: clamp(1.25rem, 1.15rem + 0.6vw, 1.375rem);
+  --font-size-2xl: clamp(1.5rem, 1.35rem + 0.8vw, 1.75rem);
+  --font-size-3xl: clamp(1.875rem, 1.6rem + 1.2vw, 2.25rem);
+
+  /* Touch Targets: minimum 48px */
+  --touch-target-min: 48px;
+
+  /* ================= Z-INDEX SCALE ================= */
+  --z-base: 0;
+  --z-card: 10;
+  --z-sticky: 100;
+  --z-banner: 500;
+  --z-modal-backdrop: 1000;
+  --z-modal: 1050;
+  --z-toast: 2000;
+  --z-danger-overlay: 9999;
+
+  /* ================= SAFE AREA DEFAULTS ================= */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* ================= ANIMATION DURATIONS ================= */
+  --anim-duration-fast: 150ms;
+  --anim-duration-normal: 250ms;
+  --anim-duration-slow: 350ms;
+  --anim-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ================= DARK THEME ================= */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="high-contrast"]) {
+    --color-bg-app: #090d16;
+    --color-bg-surface: #131b2e;
+    --color-bg-subtle: #1c2744;
+    --color-bg-muted: #27375f;
+
+    --color-text-main: #f8fafc;
+    --color-text-subtle: #cbd5e1;
+    --color-text-muted: #94a3b8;
+    --color-text-disabled: #64748b;
+
+    --color-border: #1e293b;
+    --color-border-subtle: #334155;
+    --color-border-strong: #475569;
+
+    --color-emergency-surface: #450a0a;
+    --color-emergency-border: #7f1d1d;
+    --color-safe-surface: #052e16;
+    --color-safe-border: #14532d;
+    --color-warning-surface: #451a03;
+    --color-warning-border: #78350f;
+    --color-warning-contrast: #fef3c7;
+    --color-info-surface: #172554;
+    --color-info-border: #1e3a8a;
+  }
+}
+
+/* Explicit data-theme="dark" */
+[data-theme="dark"] {
+  --color-bg-app: #090d16;
+  --color-bg-surface: #131b2e;
+  --color-bg-subtle: #1c2744;
+  --color-bg-muted: #27375f;
+
+  --color-text-main: #f8fafc;
+  --color-text-subtle: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-text-disabled: #64748b;
+
+  --color-border: #1e293b;
+  --color-border-subtle: #334155;
+  --color-border-strong: #475569;
+
+  --color-emergency-surface: #450a0a;
+  --color-emergency-border: #7f1d1d;
+  --color-safe-surface: #052e16;
+  --color-safe-border: #14532d;
+  --color-warning-surface: #451a03;
+  --color-warning-border: #78350f;
+  --color-warning-contrast: #fef3c7;
+  --color-info-surface: #172554;
+  --color-info-border: #1e3a8a;
+}
+
+/* ================= HIGH CONTRAST THEME ================= */
+[data-theme="high-contrast"] {
+  --color-bg-app: #000000;
+  --color-bg-surface: #000000;
+  --color-bg-subtle: #1a1a1a;
+  --color-bg-muted: #2e2e2e;
+
+  --color-text-main: #ffffff;
+  --color-text-subtle: #ffff00;
+  --color-text-muted: #ffffff;
+  --color-text-disabled: #aaaaaa;
+
+  --color-border: #ffffff;
+  --color-border-subtle: #ffffff;
+  --color-border-strong: #ffffff;
+
+  --color-emergency: #ff0000;
+  --color-emergency-surface: #330000;
+  --color-emergency-border: #ff0000;
+  --color-safe: #00ff00;
+  --color-safe-surface: #003300;
+  --color-safe-border: #00ff00;
+  --color-warning: #ffaa00;
+  --color-warning-surface: #332200;
+  --color-warning-border: #ffaa00;
+  --color-info: #00ccff;
+  --color-info-surface: #002233;
+  --color-info-border: #00ccff;
+}
+
+/* ================= PREFERS-REDUCED-MOTION ================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

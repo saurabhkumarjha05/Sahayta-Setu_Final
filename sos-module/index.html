@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Emergency SOS</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="sos-container">
+
+        <h1> Emergency SOS</h1>
+
+        <p class="subtitle">
+            Send your emergency location to the disaster response team
+        </p>
+
+        <!-- Emergency Type -->
+        <label for="emergencyType">Emergency Type</label>
+
+        <select id="emergencyType">
+            <option value="">Select emergency type</option>
+            <option value="Flood"> Flood</option>
+            <option value="Landslide"> Landslide</option>
+            <option value="Medical"> Medical Emergency</option>
+            <option value="Other"> Other</option>
+        </select>
+
+        <!-- Location -->
+        <div class="location-box">
+
+            <h3> Location</h3>
+
+            <p id="locationStatus">
+                Your location will be captured and saved for offline SOS.
+            </p>
+
+            <button id="locationButton">
+                 Get My Location
+            </button>
+
+
+        </div>
+
+        <!-- SOS Button -->
+        <button id="sosButton" class="sos-button">
+             SEND SOS
+        </button>
+
+        <!-- Status -->
+        <p id="statusMessage"></p>
+
+    </div>
+
+    <script src="app.js"></script>
+
+</body>
+</html>
