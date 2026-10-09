@@ -24,7 +24,7 @@ body {
   background-color: var(--color-bg-app, #f8fafc);
   color: var(--color-text-main, #0f172a);
   min-height: 100dvh;
-  min-width: 360px;
+  min-width: 320px;
   overflow-x: hidden;
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);

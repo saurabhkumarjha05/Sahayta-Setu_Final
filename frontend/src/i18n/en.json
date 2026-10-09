@@ -219,6 +219,8 @@
     "newHereCreateAccount": "New here? Create an account",
     "alreadyHaveAccount": "Already have an account? Sign in",
     "otpSent": "Verification code sent to your phone.",
+    "otpDemoCode": "Demo mode: no SMS was sent. Use OTP {{code}} (also printed in the backend terminal).",
+    "otpNotSent": "OTP was not sent by SMS. Configure Twilio and enable OTP_SMS_ENABLED in the backend.",
     "verifyOtp": "Verify code and create account",
     "citizenSubtitlePhone": "Enter your mobile number to sign in or create an account.",
     "citizenRegisterSubtitle": "Provide your name and location for emergency alerts and evacuation guidance.",

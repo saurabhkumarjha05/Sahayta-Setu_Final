@@ -220,6 +220,8 @@
     "newHereCreateAccount": "नए उपयोगकर्ता? खाता बनाएं",
     "alreadyHaveAccount": "पहले से खाता है? साइन इन करें",
     "otpSent": "आपके फोन पर सत्यापन कोड भेजा गया है।",
+    "otpDemoCode": "डेमो मोड: SMS नहीं भेजा गया। OTP {{code}} इस्तेमाल करें (यह backend terminal में भी दिखेगा)।",
+    "otpNotSent": "SMS से OTP नहीं भेजा गया। Backend में Twilio configure करके OTP_SMS_ENABLED चालू करें।",
     "verifyOtp": "कोड सत्यापित करें और खाता बनाएं",
     "citizenSubtitlePhone": "साइन इन करने या खाता बनाने के लिए अपना मोबाइल नंबर दर्ज करें।",
     "citizenRegisterSubtitle": "आपातकालीन अलर्ट और सुरक्षित निकासी मार्गदर्शन के लिए अपना विवरण दें।",

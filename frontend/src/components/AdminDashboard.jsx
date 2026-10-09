@@ -410,6 +410,14 @@ export default function AdminDashboard({ user, onLogout }) {
       {/* ===================================================
           LEFT SCROLLABLE SIDEBAR (100dvh, Sticky Header/Footer)
       =================================================== */}
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="admin-sidebar-backdrop"
+          aria-label="Close navigation menu"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}>
         {/* Sticky Header */}
         <div className="admin-sidebar-header">

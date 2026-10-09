@@ -71,6 +71,26 @@ function Login({ onLogin }) {
     setOrgView("login");
   };
 
+  const showOtpDeliveryStatus = (result) => {
+    if (result.sms === "live") {
+      setSuccessMsg(t("auth.otpSent") || "Verification code sent to your phone.");
+      return;
+    }
+
+    if (result.demoOtp) {
+      setSuccessMsg(
+        t("auth.otpDemoCode", { code: result.demoOtp }) ||
+          `Demo mode: no SMS was sent. Use this OTP: ${result.demoOtp}`
+      );
+      return;
+    }
+
+    setError(
+      t("auth.otpNotSent") ||
+        "OTP was not sent by SMS. Configure Twilio and enable OTP_SMS_ENABLED in the backend."
+    );
+  };
+
   // =========================================================
   // Citizen login uses OTP except in an explicitly configured demo environment.
   // =========================================================
@@ -94,7 +114,7 @@ function Login({ onLogin }) {
         setOtpRequested(true);
         setVerificationCode("");
         setCitizenStep(result.isNewUser ? "register" : "otp");
-        setSuccessMsg(t("auth.otpSent") || "Verification code sent to your phone.");
+        showOtpDeliveryStatus(result);
         return;
       }
 
@@ -168,12 +188,12 @@ function Login({ onLogin }) {
     try {
       if (!phoneOnlyDemo) {
         if (!otpRequested) {
-          await apiFetch("/api/auth/request-otp", {
+          const result = await apiFetch("/api/auth/request-otp", {
             method: "POST",
             body: JSON.stringify({ phone: digits }),
           });
           setOtpRequested(true);
-          setSuccessMsg(t("auth.otpSent") || "Verification code sent to your phone.");
+          showOtpDeliveryStatus(result);
           return;
         }
 

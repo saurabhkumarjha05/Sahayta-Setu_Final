@@ -48,6 +48,7 @@ function App() {
 
   // Which Control Centre page is open: dashboard | alerts | sos | map | shelters | responders
   const [activeView, setActiveView] = useState("dashboard");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sosFilter, setSosFilter] = useState("active");
 
   // Family evacuation reports: { totals, villages, reports }
@@ -620,7 +621,15 @@ function App() {
           SIDEBAR
       ===================================================== */}
 
-      <aside className="sidebar">
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close navigation menu"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+      <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
 
         <div className="brand">
 
@@ -655,7 +664,7 @@ function App() {
         </div>
 
 
-        <nav>
+        <nav onClick={() => setMobileNavOpen(false)}>
           <button
             className={`nav-item ${activeView === "dashboard" ? "active" : ""}`}
             onClick={() => openView("dashboard")}
@@ -761,6 +770,16 @@ function App() {
         =================================================== */}
 
         <header className="topbar">
+
+          <button
+            type="button"
+            className="mobile-menu-toggle"
+            aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <span aria-hidden="true">{mobileNavOpen ? "×" : "☰"}</span>
+          </button>
 
           <div>
 

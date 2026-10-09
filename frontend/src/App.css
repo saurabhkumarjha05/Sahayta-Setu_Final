@@ -106,7 +106,7 @@ button {
   font-weight: 600;
 }
 
-nav {
+.sidebar > nav {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -1091,6 +1091,10 @@ nav {
   }
 
   .header-actions .profile {
+    display: flex;
+  }
+
+  .header-actions .profile .profile-menu-trigger > div:nth-child(2) {
     display: none;
   }
 
@@ -4373,3 +4377,517 @@ button.mini-request {
 .risk-card.risk-none .risk-icon,
 .risk-card.risk-low .risk-icon { background: #dcfce7; color: #15803d; }
 .risk-card.risk-moderate h2 { color: #b45309; }
+
+/* Mobile-first layout refinements for the control, citizen and responder views. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+.app,
+.villager-page,
+.ngo-dashboard {
+  min-height: 100dvh;
+}
+
+.app,
+.main,
+.villager-page,
+.villager-main,
+.ngo-dashboard,
+.ngo-main,
+.cc-view,
+.panel {
+  min-width: 0;
+}
+
+.sidebar > nav {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.mobile-menu-toggle,
+.sidebar-backdrop {
+  display: none;
+}
+
+.mobile-menu-toggle {
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid #d8e1e3;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #10242b;
+  font-size: 21px;
+  box-shadow: 0 2px 8px rgba(16, 36, 43, 0.08);
+}
+
+.mobile-menu-toggle:active {
+  transform: scale(0.97);
+}
+
+.main {
+  max-width: 100%;
+}
+
+.villager-main,
+.ngo-main {
+  width: 100%;
+}
+
+.critical-banner,
+.action-bar,
+.panel-header,
+.villager-panel-heading,
+.ngo-welcome,
+.request-actions {
+  min-width: 0;
+}
+
+.critical-banner > *,
+.panel-header > *,
+.villager-panel-heading > *,
+.ngo-welcome > * {
+  min-width: 0;
+}
+
+.embedded-map {
+  width: 100%;
+  min-width: 0;
+}
+
+.cc-view,
+.panel,
+.status-section,
+.villager-panel,
+.ngo-map-section {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1023px) {
+  .app {
+    display: block;
+    width: 100%;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1200;
+    width: min(86vw, 320px);
+    min-height: 0;
+    height: 100vh;
+    height: 100dvh;
+    padding: max(18px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+    overflow: hidden;
+    transform: translateX(-102%);
+    transition: transform 220ms ease;
+    box-shadow: 14px 0 36px rgba(8, 22, 27, 0.24);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar .brand,
+  .sidebar .location {
+    justify-content: flex-start;
+  }
+
+  .sidebar .brand div:last-child,
+  .sidebar .location div,
+  .sidebar .nav-item {
+    font-size: revert;
+  }
+
+  .sidebar .nav-item {
+    min-height: 48px;
+    justify-content: flex-start;
+    padding: 11px 12px;
+    white-space: normal;
+  }
+
+  .sidebar .nav-item span {
+    flex: 0 0 22px;
+    font-size: 18px;
+  }
+
+  .sidebar .location {
+    margin-bottom: 14px;
+  }
+
+  .sidebar-bottom {
+    flex: 0 0 auto;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1190;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: rgba(8, 22, 27, 0.52);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-menu-toggle {
+    display: inline-flex;
+  }
+
+  .main {
+    width: 100%;
+    margin: 0;
+    padding: max(18px, env(safe-area-inset-top)) clamp(16px, 3vw, 28px)
+      max(30px, env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topbar > div:first-of-type {
+    flex: 1;
+  }
+
+  .topbar h1 {
+    font-size: clamp(1.45rem, 4vw, 1.8rem);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .subtitle {
+    line-height: 1.45;
+  }
+
+  .header-actions {
+    gap: 8px;
+  }
+
+  .header-actions .profile {
+    display: flex;
+  }
+
+  .header-actions .profile .profile-menu-trigger > div:nth-child(2) {
+    display: none;
+  }
+
+  .dashboard-grid,
+  .bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bottom-grid .panel:last-child {
+    grid-column: auto;
+  }
+
+  .dashboard-grid > *,
+  .bottom-grid > *,
+  .stats > * {
+    min-width: 0;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .critical-banner {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .critical-banner > div:nth-child(2) {
+    flex: 1 1 180px;
+  }
+
+  .critical-banner button,
+  .critical-banner .alert-button {
+    min-height: 44px;
+  }
+
+  .villager-header,
+  .ngo-header {
+    min-height: 68px;
+    height: auto;
+    padding: max(10px, env(safe-area-inset-top)) clamp(14px, 3vw, 24px) 10px;
+    gap: 12px;
+  }
+
+  .villager-brand {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .villager-main,
+  .ngo-main {
+    padding: 26px clamp(14px, 3vw, 24px) max(32px, env(safe-area-inset-bottom));
+  }
+
+  .villager-welcome h1,
+  .ngo-welcome h1 {
+    font-size: clamp(1.65rem, 4.2vw, 2.2rem);
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .villager-welcome,
+  .ngo-welcome {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .ngo-location {
+    margin-left: 0;
+  }
+
+  .embedded-map {
+    height: clamp(300px, 55vh, 460px);
+  }
+
+  .map-view-container .role-banner {
+    top: 10px;
+    left: 54px;
+    right: 10px;
+    max-width: calc(100% - 64px);
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .map-view-container .banner-left,
+  .map-view-container .banner-right {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    margin-bottom: 18px;
+  }
+
+  .topbar .breadcrumb {
+    margin-bottom: 5px;
+    font-size: 0.7rem;
+    letter-spacing: 0.07em;
+  }
+
+  .topbar h1 {
+    font-size: clamp(1.3rem, 6vw, 1.65rem);
+    letter-spacing: -0.03em;
+  }
+
+  .topbar .subtitle {
+    font-size: 0.88rem;
+  }
+
+  .live-indicator {
+    font-size: 0.68rem;
+  }
+
+  .stats {
+    gap: 10px;
+  }
+
+  .stat-card,
+  .panel {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .stat-card h2 {
+    font-size: clamp(1.35rem, 5vw, 1.7rem);
+  }
+
+  .stat-card p,
+  .panel-header p {
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .critical-banner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .critical-banner > button,
+  .critical-banner .alert-button {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .panel-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .action-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .action-bar button {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .villager-header,
+  .ngo-header {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .villager-brand h2,
+  .ngo-brand h2 {
+    font-size: 0.95rem;
+  }
+
+  .villager-header > div:last-child,
+  .ngo-header > div:last-child {
+    margin-left: auto;
+  }
+
+  .villager-main,
+  .ngo-main {
+    padding: 20px 14px max(28px, env(safe-area-inset-bottom));
+  }
+
+  .villager-welcome,
+  .ngo-welcome {
+    margin-bottom: 20px;
+  }
+
+  .villager-panel-heading,
+  .section-heading,
+  .cc-view-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .villager-grid,
+  .route-preview,
+  .route-preview-single,
+  .ngo-stats,
+  .ngo-stats.ngo-stats-3,
+  .villager-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .status-section {
+    padding: 16px !important;
+  }
+
+  .request-card,
+  .shelter-card,
+  .risk-card,
+  .villager-panel,
+  .ngo-request,
+  .ngo-map-section {
+    max-width: 100%;
+  }
+
+  .request-actions,
+  .request-actions button,
+  .route-button,
+  .navigate-button {
+    width: 100%;
+  }
+
+  .embedded-map {
+    height: min(56vh, 380px);
+    min-height: 280px;
+  }
+
+  .map-view-container .role-banner {
+    font-size: 0.72rem;
+  }
+
+  .cc-view-header h2 {
+    font-size: 1.15rem;
+    line-height: 1.3;
+  }
+
+  .cc-table-wrap,
+  .table-wrap,
+  .data-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 420px) {
+  .stats,
+  .villager-grid,
+  .route-preview,
+  .route-preview-single,
+  .ngo-stats,
+  .ngo-stats.ngo-stats-3,
+  .villager-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stat-card {
+    padding: 13px;
+  }
+
+  .villager-brand-icon,
+  .ngo-logo {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+  }
+
+  .villager-profile {
+    gap: 4px;
+    padding-right: 6px;
+  }
+
+  .villager-profile > span,
+  .ngo-profile > span {
+    margin-left: 0;
+  }
+
+  .ngo-profile {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .critical-banner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .critical-banner > button,
+  .critical-banner .alert-button {
+    grid-column: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .mobile-menu-toggle,
+  .nav-item {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms !important;
+  }
+}
