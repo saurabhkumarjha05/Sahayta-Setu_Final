@@ -329,6 +329,10 @@ function VillagerDashboard({ user, onLogout }) {
     statusTitle = t('sosStatus.couldNotSend') || "Could not send";
     statusText = latestQueued.lastErrorMessage || "Validation rejected by server. Tap below to send as new or discard.";
     statusBadge = "SYNC_REJECTED";
+  } else if (latestQueued?.relayStatus === 'RELAYED_TO_NEARBY_DEVICE') {
+    statusTitle = t('sosStatus.peerRelayTitle');
+    statusText = t('sosStatus.peerRelayDesc');
+    statusBadge = "PEER_RELAY";
   } else if (latestQueued && latestQueued.syncStatus === 'OFFLINE_QUEUE_ONLY') {
     statusTitle = t('sosStatus.savedLocally') || "SOS saved on this phone, not sent yet";
     statusText = `Saved locally in IndexedDB.${latestQueued.retryCount ? ` · Retries: ${latestQueued.retryCount}` : ''}${latestQueued.lastAttemptTime ? ` · Last attempt: ${alertTime(latestQueued.lastAttemptTime)}` : ''}`;

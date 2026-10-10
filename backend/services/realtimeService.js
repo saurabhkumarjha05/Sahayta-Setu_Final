@@ -365,6 +365,61 @@ async function sendTargetedPush({ title, body, severity = 'High', alertId, targe
 }
 
 /**
+ * Send a new SOS notification only to authority subscriptions covering its area.
+ */
+async function sendSOSAuthorityNotification(sos) {
+  const authorityRoles = new Set([
+    'control',
+    'panchayat',
+    'district_authority',
+    'state_authority'
+  ]);
+  const targetDistrict = sos.district ? String(sos.district).trim().toLowerCase() : null;
+  const targetState = sos.state ? String(sos.state).trim().toLowerCase() : null;
+  const village = sos.village && sos.village !== 'Unknown' ? sos.village : sos.district || 'your area';
+  const payload = JSON.stringify({
+    title: `🚨 SOS ${sos.priority || 'HIGH'} · ${sos.district || 'Emergency'}`,
+    body: `${sos.type || 'Emergency'} reported from ${village}. Open Sahayta Setu to respond.`,
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
+    severity: sos.priority || 'HIGH',
+    alertId: sos.clientIncidentId || sos._id,
+    targetState: sos.state,
+    targetDistrict: sos.district,
+    timestamp: Date.now(),
+    url: '/'
+  });
+
+  let sentCount = 0;
+  let failCount = 0;
+
+  for (const [endpoint, subMeta] of pushSubscriptions.entries()) {
+    if (!authorityRoles.has(subMeta.role)) continue;
+
+    const matchesState = !targetState || subMeta.state === targetState;
+    const matchesDistrict = subMeta.role === 'state_authority'
+      ? true
+      : !targetDistrict || subMeta.district === targetDistrict;
+
+    if (!matchesState || !matchesDistrict) continue;
+
+    try {
+      await webpush.sendNotification(subMeta.subscription, payload);
+      sentCount++;
+    } catch (err) {
+      failCount++;
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        pushSubscriptions.delete(endpoint);
+      } else {
+        console.warn('SOS authority push delivery failed:', err.message);
+      }
+    }
+  }
+
+  return { sentCount, failCount };
+}
+
+/**
  * Broadcast resource creation/update/deletion to jurisdiction rooms and general listeners
  */
 function emitResourceCreated(shelter) {
@@ -425,6 +480,6 @@ module.exports = {
   emitResourceClosed,
   savePushSubscription,
   sendTargetedPush,
+  sendSOSAuthorityNotification,
   pushSubscriptions
 };
-

@@ -51,6 +51,57 @@ async function withQueueStore(mode, work) {
   });
 }
 
+transportManager.onRelayReceived(async (packet, { serverReceived }) => {
+  if (serverReceived) return;
+
+  const litePayload = packet.originalPayload || packet.payload;
+  const signature = packet.originalSignature || packet.signature;
+  if (!litePayload || !signature) {
+    throw new Error(`Relayed SOS ${packet.clientIncidentId} is missing its signed payload.`);
+  }
+
+  const relayMetadata = {
+    district: packet.district || '',
+    state: packet.state || '',
+    village: packet.village || '',
+    sourceChannel: 'PEER_RELAY',
+    hopCount: packet.hopCount,
+    relayDeviceId: packet.relayDeviceId || null
+  };
+  const litePacket = { ...litePayload, signature };
+
+  await withQueueStore('readwrite', (store) => store.put({
+    ...litePayload,
+    clientIncidentId: packet.clientIncidentId,
+    deviceId: litePayload.deviceId,
+    litePacket,
+    relayPacket: packet,
+    relayMetadata,
+    detailsPayload: {
+      clientIncidentId: packet.clientIncidentId,
+      description: `Emergency ${litePayload.incidentType || 'Medical'} dispatch request (relayed)`,
+      village: relayMetadata.village,
+      district: relayMetadata.district,
+      state: relayMetadata.state
+    },
+    sourceChannel: 'PEER_RELAY',
+    latitude: litePayload.lat,
+    longitude: litePayload.lng,
+    priority: computeLitePriority(litePayload),
+    syncStatus: 'OFFLINE_QUEUE_ONLY',
+    liteSynced: false,
+    detailsSynced: false,
+    retryCount: 0,
+    queuedAt: new Date().toISOString(),
+    token: getToken(),
+    signature
+  }));
+
+  if ((packet.hopCount || 0) < transportManager.maxHopCount) {
+    await transportManager.dispatch(packet);
+  }
+});
+
 // ---------- Smart SOS Location System ----------
 
 export function readLastKnownLocation() {
@@ -332,8 +383,14 @@ export async function sendSosLiteViaSocket(litePacket, timeoutMs = 2500) {
 /**
  * Transmit SOS Lite via plain HTTP POST /api/sos/lite
  */
-export async function sendSosLiteHttp(litePacket, token) {
+export async function sendSosLiteHttp(litePacket, token, relayMetadata = null) {
   const authToken = token || getToken();
+  const requestBody = relayMetadata
+    ? {
+        payload: litePacket,
+        ...relayMetadata
+      }
+    : litePacket;
   let response;
   try {
     response = await fetch(`${API_URL}/api/sos/lite`, {
@@ -342,7 +399,7 @@ export async function sendSosLiteHttp(litePacket, token) {
         'Content-Type': 'application/json',
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
       },
-      body: JSON.stringify(litePacket)
+      body: JSON.stringify(requestBody)
     });
   } catch (netErr) {
     const err = new Error(netErr.message || 'Network request failed');
@@ -472,11 +529,31 @@ export async function queueAndSendEmergencySOS(sosData) {
   };
 
   // 3. Save to IndexedDB FIRST with status OFFLINE_QUEUE_ONLY
+  const relayPacket = {
+    type: 'EMERGENCY_RELAY_PACKET',
+    originDeviceId: deviceId,
+    relayDeviceId: deviceId,
+    clientIncidentId,
+    hopCount: 0,
+    maxHopCount: 5,
+    originalTimestamp: Date.now(),
+    originalPayload: unsignedLite,
+    originalSignature: signature,
+    timestamp: Date.now(),
+    payload: unsignedLite,
+    signature,
+    seenIncidentIds: [clientIncidentId],
+    district: sosData.district || 'Dehradun',
+    state: sosData.state || 'Uttarakhand',
+    village: sosData.village || ''
+  };
+
   const queueRecord = {
     clientIncidentId,
     userId,
     deviceId,
     litePacket,
+    relayPacket,
     detailsPayload,
     syncStatus: 'OFFLINE_QUEUE_ONLY', // OFFLINE_QUEUE_ONLY | SYNCING | SERVER_RECEIVED | SYNC_REJECTED
     liteSynced: false,
@@ -509,23 +586,13 @@ export async function queueAndSendEmergencySOS(sosData) {
   // 4. Opportunistic mesh relay broadcast (store-and-forward)
   let dispatchResult = null;
   try {
-    dispatchResult = await transportManager.dispatch({
-      type: 'EMERGENCY_RELAY_PACKET',
-      originDeviceId: deviceId,
-      relayDeviceId: deviceId,
-      clientIncidentId,
-      hopCount: 0,
-      maxHopCount: 5,
-      originalTimestamp: Date.now(),
-      originalPayload: unsignedLite,
-      originalSignature: signature,
-      timestamp: Date.now(),
-      payload: unsignedLite,
-      signature,
-      seenIncidentIds: [clientIncidentId]
-    });
+    dispatchResult = await transportManager.dispatch(relayPacket);
   } catch (err) {
     console.warn('Opportunistic relay dispatch notice:', err);
+  }
+  if (dispatchResult?.communicationState === 'LOCAL_RELAY_AVAILABLE') {
+    queueRecord.relayStatus = 'RELAYED_TO_NEARBY_DEVICE';
+    await withQueueStore('readwrite', (store) => store.put(queueRecord));
   }
 
   // 5. Ask Service Worker background sync to assist
@@ -711,6 +778,45 @@ export async function getEmergencyQueue() {
   }
 }
 
+export async function forwardPendingSOSViaMesh() {
+  const records = await withQueueStore('readonly', (store) => store.getAll());
+  let relayedCount = 0;
+
+  for (const record of records) {
+    if (record.syncStatus === 'SERVER_RECEIVED' || record.syncStatus === 'SYNCED' || record.syncStatus === 'SYNC_REJECTED') {
+      continue;
+    }
+
+    const litePacket = record.litePacket;
+    if (!litePacket?.signature || !litePacket?.clientIncidentId) continue;
+
+    const relayPacket = record.relayPacket || {
+      type: 'EMERGENCY_RELAY_PACKET',
+      originDeviceId: litePacket.deviceId,
+      relayDeviceId: litePacket.deviceId,
+      clientIncidentId: litePacket.clientIncidentId,
+      hopCount: Number(record.relayMetadata?.hopCount) || 0,
+      maxHopCount: 5,
+      originalTimestamp: new Date(litePacket.createdAt || record.queuedAt || Date.now()).getTime(),
+      originalPayload: Object.fromEntries(Object.entries(litePacket).filter(([key]) => key !== 'signature')),
+      originalSignature: litePacket.signature,
+      timestamp: Date.now(),
+      payload: Object.fromEntries(Object.entries(litePacket).filter(([key]) => key !== 'signature')),
+      signature: litePacket.signature,
+      district: record.district || record.relayMetadata?.district || '',
+      state: record.state || record.relayMetadata?.state || '',
+      village: record.village || record.relayMetadata?.village || ''
+    };
+
+    const result = await transportManager.dispatch(relayPacket);
+    if (result.communicationState === 'LOCAL_RELAY_AVAILABLE' || result.communicationState === 'SERVER_RECEIVED') {
+      relayedCount++;
+    }
+  }
+
+  return { relayedCount };
+}
+
 // Single Sync Lock to prevent parallel runs between page, timers, and background sync
 let isSyncRunning = false;
 
@@ -759,9 +865,12 @@ export async function syncPendingSOS() {
           });
           litePacket.signature = record.signature;
 
-          let ack = await sendSosLiteViaSocket(litePacket);
+          let ack = null;
+          if (!record.relayMetadata) {
+            ack = await sendSosLiteViaSocket(litePacket);
+          }
           if (!ack) {
-            ack = await sendSosLiteHttp(litePacket, record.token);
+            ack = await sendSosLiteHttp(litePacket, record.token, record.relayMetadata);
           }
           record.liteSynced = true;
           record.backendAck = ack;

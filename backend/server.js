@@ -38,6 +38,7 @@ const {
   emitResourceClosed,
   savePushSubscription,
   sendTargetedPush,
+  sendSOSAuthorityNotification,
   VAPID_PUBLIC_KEY
 } = require('./services/realtimeService');
 const {
@@ -1223,9 +1224,14 @@ app.post('/api/alerts/subscribe', optionalAuth, (req, res) => {
   if (!subscription || !subscription.endpoint) {
     return res.status(400).json({ error: 'Valid push subscription is required' });
   }
+  const authorityRoles = ['control', 'panchayat', 'district_authority', 'state_authority'];
+  const isAuthority = authorityRoles.includes(req.user?.role);
+  if (isAuthority && req.user.verificationStatus !== 'VERIFIED') {
+    return res.status(403).json({ error: 'Only verified authorities can register authority notifications' });
+  }
   savePushSubscription(subscription, {
-    district: district || req.user?.district,
-    state: state || req.user?.state,
+    district: isAuthority ? req.user.district : (district || req.user?.district),
+    state: isAuthority ? req.user.state : (state || req.user?.state),
     userId: req.user?.id,
     role: req.user?.role
   });
@@ -1831,14 +1837,14 @@ async function handleEmergencySOS(req, res, isRelay = false) {
     }
 
     // 3. Extract and normalize location & metadata
-    const lat = Number(payload.latitude !== undefined ? payload.latitude : payload.location?.lat);
-    const lng = Number(payload.longitude !== undefined ? payload.longitude : payload.location?.lng);
+    const lat = Number(payload.latitude !== undefined ? payload.latitude : (payload.lat !== undefined ? payload.lat : payload.location?.lat));
+    const lng = Number(payload.longitude !== undefined ? payload.longitude : (payload.lng !== undefined ? payload.lng : payload.location?.lng));
     const location = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : { lat: 30.3165, lng: 78.0322 };
 
     const user = req.user ? await User.findById(req.user.id).catch(() => null) : null;
-    const district = payload.district || user?.district || req.user?.district || 'Dehradun';
-    const state = payload.state || user?.state || req.user?.state || 'Uttarakhand';
-    const village = payload.village || user?.village || req.user?.village || 'Unknown';
+    const district = payload.district || raw.district || user?.district || req.user?.district || 'Dehradun';
+    const state = payload.state || raw.state || user?.state || req.user?.state || 'Uttarakhand';
+    const village = payload.village || raw.village || user?.village || req.user?.village || 'Unknown';
     const incidentType = payload.incidentType || payload.type || 'Medical';
     const locationSource = payload.locationSource || (payload.isApproximateLocation ? 'DISTRICT_FALLBACK' : 'GPS_EXACT');
     const locationAccuracy = Number(payload.locationAccuracy) || (locationSource === 'GPS_EXACT' ? 18 : 1000);
@@ -1846,7 +1852,9 @@ async function handleEmergencySOS(req, res, isRelay = false) {
     const hopCount = Number(raw.hopCount || payload.hopCount || 0);
     const relayDeviceId = raw.relayDeviceId || null;
 
-    const candidateReporter = req.user?.id || user?._id || verifiedDevice?.userId || (mongoose.isValidObjectId(userId) ? userId : null);
+    const candidateReporter = isRelay
+      ? (verifiedDevice?.userId || (mongoose.isValidObjectId(userId) ? userId : null))
+      : (req.user?.id || user?._id || verifiedDevice?.userId || (mongoose.isValidObjectId(userId) ? userId : null));
     const reportedBy = candidateReporter && mongoose.isValidObjectId(candidateReporter)
       ? new mongoose.Types.ObjectId(candidateReporter)
       : null;
@@ -1868,7 +1876,7 @@ async function handleEmergencySOS(req, res, isRelay = false) {
       peopleAffected: Number(payload.peopleAffected || 1),
       vulnerableCount: Number(payload.vulnerableCount || 0),
       needsMedical: Boolean(payload.needsMedical),
-      sourceChannel: payload.sourceChannel || raw.sourceChannel || 'DIRECT_INTERNET',
+      sourceChannel: payload.sourceChannel || raw.sourceChannel || (isRelay ? 'PEER_RELAY' : 'DIRECT_INTERNET'),
       isLite: false,
       detailsSynced: true,
       detailsSyncedAt: new Date(),
@@ -1885,8 +1893,12 @@ async function handleEmergencySOS(req, res, isRelay = false) {
       responderLocation: null,
       responderDistanceKm: null,
       reportedBy,
-      contactName: user?.name || req.user?.name || payload.contactName || 'Civic Reporter',
-      contactPhone: user?.phone || req.user?.phone || payload.contactPhone || '+919876543210'
+      contactName: isRelay
+        ? (payload.contactName || 'Civic Reporter (relayed)')
+        : (user?.name || req.user?.name || payload.contactName || 'Civic Reporter'),
+      contactPhone: isRelay
+        ? (payload.contactPhone || null)
+        : (user?.phone || req.user?.phone || payload.contactPhone || '+919876543210')
     };
 
     // 4. Smart Responder Proximity Matching & Load Balancing
@@ -1930,6 +1942,7 @@ async function handleEmergencySOS(req, res, isRelay = false) {
 
     // 6. Real-time Socket.IO Broadcast
     broadcastNewSOS(sosObj, matchedResponders);
+    await sendSOSAuthorityNotification(sosObj);
 
     return res.status(201).json({
       ...sosObj,
@@ -2129,6 +2142,7 @@ async function handleSosLite(req, res) {
 
     // 6. Real-time Broadcast
     broadcastNewSOS(sosObj, matchedResponders);
+    await sendSOSAuthorityNotification(sosObj);
 
     return res.status(201).json({
       ...sosObj,

@@ -17,7 +17,16 @@
     "installApp": "Install Sahayta Setu",
     "installAppDesc": "Get full offline capabilities and instant emergency alerts on your home screen.",
     "installButton": "Install App",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "meshTitle": "Nearby SOS Mesh",
+    "meshDescription": "Enable nearby Android relay. Keep Sahayta Setu open; a connected phone can upload SOS when it gets internet.",
+    "meshSearching": "Searching nearby phones using Wi-Fi and Bluetooth. Keep this app open.",
+    "meshPeersConnected": "{{count}} nearby phone(s) connected. SOS can relay without internet.",
+    "meshEnable": "Enable Nearby Relay",
+    "meshStop": "Stop Nearby Relay",
+    "meshStartFailed": "Could not start nearby relay. Check Bluetooth, Wi-Fi and Nearby Devices permissions.",
+    "meshStopFailed": "Could not stop nearby SOS relay.",
+    "meshRelayFailed": "A nearby SOS could not be stored or relayed. Keep this app open and retry."
   },
   "alert": {
     "dangerTitle": "You are in danger",
@@ -61,6 +70,8 @@
     "syncingDesc": "Transmitting compact SOS Lite.",
     "offlineQueueTitle": "SOS saved on this phone, not sent yet",
     "offlineQueueDesc": "Will automatically upload as soon as cellular or Wi-Fi connection returns.",
+    "peerRelayTitle": "SOS relayed to a nearby phone",
+    "peerRelayDesc": "The SOS is still saved here and is being forwarded until the server confirms receipt.",
     "pressAndHold": "Hold for 1.5s to Send SOS",
     "confirmSend": "Sending SOS..."
   },

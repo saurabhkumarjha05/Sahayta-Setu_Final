@@ -18,6 +18,45 @@ Requirements: Node.js 22.12+ and MongoDB.
 
 The frontend uses same-origin API requests by default. Set `VITE_API_URL` in `frontend/.env` only when the backend is hosted at a different origin, and configure `CORS_ORIGINS` in the backend to include that exact frontend origin. Production deployments must set `NODE_ENV=production`, use OTP authentication, configure SMS delivery, and set a restrictive CORS allowlist.
 
+## Install and test the mobile PWA
+
+The PWA is the installable browser version of the web app. It needs an HTTPS URL (or `localhost` on the same phone) for installation and Service Worker support. For a phone test, deploy the frontend and backend to a staging environment first; use one HTTPS origin with `/api` and `/socket.io` reverse-proxied to the backend where possible. If the API has a separate origin, set `VITE_API_URL` to that HTTPS API origin at frontend build time and allow the frontend origin in the backend's `CORS_ORIGINS`.
+
+Do not use a real emergency or production authority accounts for testing. Test SOS, alerts, push notifications, and responder actions can create operational records or contact real subscribers. Use a staging database, test accounts, and disabled/test-only SMS and push integrations.
+
+### Install on a phone
+
+1. Open the deployed staging HTTPS URL in Chrome on Android (or Safari on iPhone) and sign in with a staging account. In this repository's local demo configuration, OTP delivery can be set to `console`; use only the OTP returned/logged by that demo backend. Production should use its configured OTP provider.
+2. Keep the app open while it loads, then allow location and notifications if prompted. Visit the screens you plan to test so their static files are cached. Confirm the browser reports the Service Worker as active; on Android Chrome, use **⋮ → Install app** or **Add to Home screen**. On iPhone Safari, use **Share → Add to Home Screen**.
+3. Open the installed Sahayta Setu icon and verify login and navigation. Do not clear browser/site data or use a private tab during offline tests; those can remove the cached app shell and IndexedDB SOS queue.
+
+### Safe PWA test checklist
+
+| Test | Steps | Expected result |
+| --- | --- | --- |
+| App install and cached shell | Install as above, close and reopen the installed app while online. | App opens in standalone mode and the signed-in session remains available. |
+| Villager map and resources | Sign in as a staging villager; allow location; open the map, shelters, and alerts. | Map/resources render, location permission is handled, and available alert/shelter data is shown. |
+| Online SOS | Submit a clearly labelled test SOS while connected to the staging backend. | SOS receives `SERVER_RECEIVED`; verify the same incident ID appears on the staging authority dashboard. |
+| Offline SOS queue | While still signed in and online, first submit one staging SOS so the originating device can register. Then turn on Airplane mode, reopen the installed app, and submit a second clearly labelled test SOS. | New SOS is saved locally and shown as `OFFLINE_QUEUE_ONLY`. This means **saved on this phone only**, not delivered to an authority or another phone. |
+| Reconnect and synchronize | Turn connectivity back on, reopen/foreground the PWA, and wait for sync. | Queued incident changes to `SERVER_RECEIVED`; verify its original incident ID appears once on the staging authority dashboard. A visible local queue alone is not server receipt. |
+| Area-targeted authority notification | On staging, create a verified authority account with the same test district, allow notifications, and open its control dashboard to register the subscription. Publish a test alert or submit a test SOS from that district. | Matching authority receives the relevant in-app/push notification; an authority in a different district must not receive a jurisdiction-targeted notification. Browser/OS notification permission and configured push credentials are required. |
+| Responder workflow | Sign in on a separate staging responder/NGO account, view the test SOS, and exercise assignment/status changes supported by that account. | Authorized responder can act; unauthorized or out-of-jurisdiction actions are rejected. |
+| Offline shell | After the app has loaded online at least once, disconnect the phone from the internet and reopen it. | Cached app shell can open if its files were cached. Live APIs, maps/tiles, new alerts, push delivery, and dashboard updates are not guaranteed offline. |
+
+Restore connectivity and verify the backend/dashboard after each offline test. Do not infer successful delivery from a green browser icon, `navigator.onLine`, or an SOS queue entry; use the SOS status and confirm the incident on the staging server.
+
+### Cross-phone offline mesh test (Android companion app required)
+
+**This is not a browser-PWA capability.** A PWA installed from Chrome/Safari cannot automatically discover other phones or transmit SOS over nearby Bluetooth/Wi-Fi. For this test use the Capacitor Android companion app and the debug APK described below. The APK uses the same web UI but adds the native Nearby Connections bridge.
+
+1. Use two physical Android phones with Google Play services. Install the same staging build on both, sign in to separate staging accounts, and open the app on each phone.
+2. While both have internet, submit a harmless test SOS from phone A so its device is registered with the staging backend. Then enable **Nearby SOS relay** on both phones and grant the Android nearby-device permissions. Keep both apps open in the foreground and Bluetooth/Wi-Fi enabled.
+3. Remove internet from phone A but leave its radios on; keep phone B connected to the internet. Submit a new, clearly labelled test SOS on phone A.
+4. Verify phone A reports a nearby peer/relay (not just local queue), then verify the test incident ID appears once on the staging authority dashboard after phone B forwards it. If phone B has no internet either, allow it to receive/store the packet first, then restore its internet while the app remains open and verify upload.
+5. Repeat with both phones offline, then reconnect one relay phone. Record each state separately: `OFFLINE_QUEUE_ONLY` = only saved on source phone; nearby relay = packet reached a peer; `SERVER_RECEIVED` plus staging dashboard entry = server confirmed receipt.
+
+If the devices do not discover each other, check that Nearby relay is active on both, permissions are granted, Bluetooth/Wi-Fi are on, the apps remain foregrounded, and both APKs are from the same compatible build. Nearby discovery can be affected by Android battery restrictions. This implementation has no persistent foreground service, so do not assume it will relay while closed or suspended. Do not enable this test against a production backend.
+
 ---
 
 ## 📌 Problem Statement
@@ -138,6 +177,27 @@ The system can additionally support an SMS-based SOS mechanism.
 A predefined SMS keyword can be received through a messaging service and forwarded to the backend through a webhook.
 
 This provides an alternative communication channel when internet access is unavailable but cellular SMS service is available.
+
+### Android nearby SOS relay
+
+The PWA queues SOS reports in IndexedDB, but browser APIs alone cannot automatically discover and relay messages between nearby phones. For cross-device, internet-free forwarding, this repository also includes an Android companion shell using Google Nearby Connections. Nearby phones can pass the signed SOS packet over Bluetooth/Wi-Fi; each phone keeps a copy until it can upload the original report to the server. Authority/responders can participate as relay devices too.
+
+Build and install the Android app:
+
+1. Install Android Studio with an Android SDK, Java 21, and Node.js 22.12 or later. Connect an Android phone or start an emulator with Google Play services.
+2. Configure `frontend/.env` with the deployed HTTPS API origin, for example `VITE_API_URL=https://api.example.org`. The packaged Android WebView cannot use the Vite development proxy.
+3. Run `npm --prefix frontend install`, then `npm --prefix frontend run android:sync`.
+4. Open `frontend/android` in Android Studio and run the `app` configuration on a device, or build a debug APK from PowerShell:
+
+   ```powershell
+   cd frontend\android
+   .\gradlew.bat assembleDebug
+   ```
+
+   The debug APK is written to `frontend/android/app/build/outputs/apk/debug/app-debug.apk`.
+5. Install the app on each participating Android phone, sign in, and enable Nearby SOS relay in the dashboard. Grant the requested nearby-device permissions. Register the originating device with the backend while online before relying on its signed SOS offline.
+
+Keep the app open with Nearby relay enabled on phones expected to forward messages. Android may pause discovery when the app is backgrounded or battery restricted; this implementation does not yet run a persistent foreground service. Bluetooth/Wi-Fi radios must remain enabled even when internet service is unavailable, and delivery to another phone is not confirmation that authorities have received the SOS. The SOS stays queued until the server acknowledges it. Browser-only PWA installations continue to support local offline queueing and later synchronization, but do not provide automatic cross-phone mesh relay.
 
 ---
 
@@ -439,14 +499,3 @@ Possible future improvements include:
 **Theme:** Disaster Management
 
 **Focus:** Flood and Landslide Early Warning & Community Response
-
-### Team Members
-
-- Dhanya Hegde
-- Medini M
-- K Vasundhara Bhat
-- Rajeshwari S
-
-> Add or update team members according to the final team composition.
-
-

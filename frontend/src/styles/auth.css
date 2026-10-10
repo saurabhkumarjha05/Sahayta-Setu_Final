@@ -530,6 +530,25 @@
     position: sticky;
     top: 88px;
   }
+
+  .auth-v2 .auth-card {
+    max-height: calc(100dvh - 112px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: #aeb9ca transparent;
+    scrollbar-width: thin;
+  }
+
+  .auth-v2 .auth-card::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .auth-v2 .auth-card::-webkit-scrollbar-thumb {
+    background: #aeb9ca;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
 }
 
 /* On mobile, place auth card first above the pillars */
@@ -1061,10 +1080,15 @@
    LOCATION SELECTOR INTEGRATION INSIDE AUTH-V2
 ====================================================================== */
 .auth-v2 .location-selector-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.auth-v2 .location-field.input-section {
+  min-width: 0;
+  margin-top: 0;
 }
 
 .auth-v2 .location-field label {
@@ -1080,14 +1104,18 @@
 
 .auth-v2 .location-field .input-wrapper {
   width: 100%;
-  border-radius: 10px;
-  border: 1.5px solid var(--outline-variant);
-  background: var(--surface);
-  height: 46px;
+  border-radius: 12px;
+  border: 1.5px solid #d5d9e2;
+  background: #fbfcff;
+  min-height: 48px;
   display: flex;
   align-items: center;
   overflow: hidden;
-  transition: all 180ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.auth-v2 .location-field .input-wrapper:hover {
+  border-color: #aab4c5;
 }
 
 .auth-v2 .location-field .input-wrapper:focus-within {
@@ -1098,15 +1126,31 @@
 
 .auth-v2 .location-dropdown {
   width: 100%;
+  min-width: 0;
+  min-height: 46px;
   height: 100%;
   border: none;
   outline: none;
   background: transparent;
-  padding: 0 14px;
+  padding: 0 36px 0 14px;
   font-family: inherit;
   font-size: 14px;
+  font-weight: 600;
   color: var(--on-surface);
   cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.auth-v2 .location-dropdown:disabled {
+  color: #8b9099;
+  cursor: not-allowed;
+}
+
+@media (max-width: 479px) {
+  .auth-v2 .location-selector-group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
 }
 
 /* ======================================================================

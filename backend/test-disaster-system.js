@@ -716,6 +716,39 @@ async function runTests() {
     assert(peerRes.status === 201, 'SOS Lite with PEER_RELAY accepted with 201 Created');
     assert(peerRes.data.sourceChannel === 'PEER_RELAY', 'sourceChannel PEER_RELAY preserved');
 
+    // 15i: A signed compact SOS relayed through /api/sos/relay preserves origin location and jurisdiction
+    const relayedLiteIncidentId = `inc_relay_lite_${Date.now()}`;
+    const relayedLitePayload = buildSosLitePayload({
+      clientIncidentId: relayedLiteIncidentId,
+      deviceId: liteDeviceId,
+      incidentType: 'Flash Flood',
+      lat: 12.9716,
+      lng: 77.5946,
+      locationSource: 'GPS_EXACT',
+      locationAccuracy: 9,
+      peopleAffected: 4,
+      vulnerableCount: 1,
+      needsMedical: true,
+      createdAt: new Date().toISOString()
+    });
+    const relayedLiteSignature = await signPayload(litePrivateKey, relayedLitePayload);
+    const relayIngestRes = await request('/api/sos/relay', {
+      method: 'POST',
+      body: {
+        payload: relayedLitePayload,
+        signature: relayedLiteSignature,
+        hopCount: 2,
+        relayDeviceId: 'dev_nearby_relay',
+        district: 'Bengaluru Urban',
+        state: 'Karnataka',
+        village: 'Shivajinagar'
+      }
+    });
+    assert(relayIngestRes.status === 201, 'Signed compact SOS Lite is accepted by the peer relay endpoint');
+    assert(relayIngestRes.data.location.lat === 12.9716 && relayIngestRes.data.location.lng === 77.5946, 'Peer relay preserves original compact SOS coordinates');
+    assert(relayIngestRes.data.district === 'Bengaluru Urban' && relayIngestRes.data.state === 'Karnataka' && relayIngestRes.data.village === 'Shivajinagar', 'Peer relay preserves original SOS jurisdiction metadata');
+    assert(relayIngestRes.data.sourceChannel === 'PEER_RELAY' && relayIngestRes.data.hopCount === 2 && relayIngestRes.data.relayDeviceId === 'dev_nearby_relay', 'Peer relay attribution and hop metadata are recorded');
+
     // ====================================================
     // TEST 16: Public Health API & WebCrypto Real Device Ingestion
     // ====================================================

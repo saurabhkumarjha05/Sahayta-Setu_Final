@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sahayta Setu</string>
+    <string name="title_activity_main">Sahayta Setu</string>
+    <string name="package_name">org.sahaytasetu.disastermanagement</string>
+    <string name="custom_url_scheme">org.sahaytasetu.disastermanagement</string>
+</resources>

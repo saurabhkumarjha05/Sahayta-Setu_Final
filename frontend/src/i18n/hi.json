@@ -17,7 +17,16 @@
     "installApp": "सहायता सेतु ऐप इंस्टॉल करें",
     "installAppDesc": "अपनी होम स्क्रीन पर पूर्ण ऑफलाइन सुविधा और त्वरित आपातकालीन अलर्ट प्राप्त करें।",
     "installButton": "ऐप इंस्टॉल करें",
-    "dismiss": "हटाएं"
+    "dismiss": "हटाएं",
+    "meshTitle": "नज़दीकी SOS मेश",
+    "meshDescription": "नज़दीकी Android फ़ोन के ज़रिए SOS भेजने के लिए रिले चालू करें। ऐप खुला रखें; इंटरनेट मिलते ही जुड़ा फ़ोन SOS अपलोड कर सकता है।",
+    "meshSearching": "Wi-Fi और Bluetooth से नज़दीकी फ़ोन खोज रहे हैं। ऐप खुला रखें।",
+    "meshPeersConnected": "{{count}} नज़दीकी फ़ोन जुड़ा है। इंटरनेट के बिना SOS रिले हो सकता है।",
+    "meshEnable": "नज़दीकी रिले चालू करें",
+    "meshStop": "नज़दीकी रिले बंद करें",
+    "meshStartFailed": "नज़दीकी रिले शुरू नहीं हुआ। Bluetooth, Wi-Fi और Nearby Devices अनुमति जाँचें।",
+    "meshStopFailed": "नज़दीकी SOS रिले बंद नहीं हो सका।",
+    "meshRelayFailed": "नज़दीकी SOS सहेजा या रिले नहीं हो सका। ऐप खुला रखें और फिर कोशिश करें।"
   },
   "alert": {
     "dangerTitle": "आप खतरे में हैं / You are in danger",
@@ -61,6 +70,8 @@
     "syncingDesc": "संक्षिप्त SOS लाइट पैकेट भेजा जा रहा है।",
     "offlineQueueTitle": "SOS इस फोन में सुरक्षित है, अभी सर्वर पर नहीं पहुंचा",
     "offlineQueueDesc": "मोबाइल नेटवर्क या वाई-फाई आते ही स्वतः अपलोड हो जाएगा।",
+    "peerRelayTitle": "SOS नज़दीकी फ़ोन तक रिले हुआ",
+    "peerRelayDesc": "SOS इस फ़ोन में भी सुरक्षित है और सर्वर से पुष्टि मिलने तक आगे भेजा जाएगा।",
     "pressAndHold": "SOS भेजने के लिए 1.5 सेकंड दबाकर रखें",
     "confirmSend": "SOS भेजा जा रहा है..."
   },

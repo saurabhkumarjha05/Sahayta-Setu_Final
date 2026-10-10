@@ -1,7 +1,8 @@
 // Sahayta Setu Service Worker
 // Offline SOS Queue Synchronization, Web Push Alerts & Emergency Audio Precaching
 
-const CACHE_NAME = "sahayta-assets-v1";
+const CACHE_PREFIX = "sahayta-";
+const CACHE_NAME = "sahayta-assets-v2";
 const DB_NAME = "sosDB";
 const QUEUE_STORE = "emergencySOSQueue";
 const ALERTS_STORE = "alertsCacheStore";
@@ -42,7 +43,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) return caches.delete(key);
+          if (key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME) return caches.delete(key);
         })
       );
     }).then(() => self.clients.claim())
@@ -120,7 +121,12 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(event.request).catch(async () => {
         const cache = await caches.open(CACHE_NAME);
-        return cache.match("/index.html") || cache.match("/");
+        return (await cache.match("/index.html")) ||
+          (await cache.match("/")) ||
+          new Response("Sahayta Setu is offline. Your saved SOS reports will sync when connectivity returns.", {
+            status: 503,
+            headers: { "Content-Type": "text/plain; charset=utf-8" }
+          });
       })
     );
     return;
@@ -197,7 +203,9 @@ async function syncEmergencyQueue() {
           const liteRes = await fetch(LITE_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...authHeader },
-            body: JSON.stringify(record.litePacket)
+            body: JSON.stringify(record.relayMetadata
+              ? { payload: record.litePacket, ...record.relayMetadata }
+              : record.litePacket)
           });
           if (liteRes.ok || liteRes.status === 200 || liteRes.status === 201) {
             record.liteSynced = true;

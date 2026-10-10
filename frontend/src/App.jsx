@@ -21,8 +21,11 @@ import StatusScreen from "./components/StatusScreen";
 import GramPanchayatMap from "./components/map/GramPanchayatMap";
 import "./App.css";
 import LocationSelector from "./components/LocationSelector";
+import { InstallPrompt } from "./components/ui";
+import { NearbyMeshControl } from "./components/ui/NearbyMeshControl";
 import { getSocket, subscribeToDistrict } from "./utils/socketClient";
 import { registerDeviceWithBackend } from "./utils/trustedDevice";
+import { registerPushNotifications } from "./utils/pushNotifications";
 
 // Value of the "Other village" choice in the alert form
 const OTHER_VILLAGE = "__other__";
@@ -105,6 +108,20 @@ function App() {
     clearSession();
     setSession(null);
   };
+
+  useEffect(() => {
+    if (
+      loggedIn &&
+      role === "control" &&
+      session?.user?.verificationStatus === "VERIFIED"
+    ) {
+      registerPushNotifications({
+        state: session.user.state,
+        district: session.user.district,
+        user: session.user,
+      });
+    }
+  }, [loggedIn, role, session?.user]);
 
   // =========================================================
   // FETCH SOS
@@ -544,7 +561,12 @@ function App() {
   // =========================================================
 
   if (role === "villager") {
-    return <VillagerDashboard user={session.user} onLogout={handleLogout} />;
+    return (
+      <>
+        <NearbyMeshControl role={role} />
+        <VillagerDashboard user={session.user} onLogout={handleLogout} />
+      </>
+    );
   }
 
   // =========================================================
@@ -570,12 +592,24 @@ function App() {
 
   // NGO (VERIFIED)
   if (role === "ngo") {
-    return <NgoDashboard user={session.user} onLogout={handleLogout} />;
+    return (
+      <>
+        <InstallPrompt />
+        <NearbyMeshControl role={role} />
+        <NgoDashboard user={session.user} onLogout={handleLogout} />
+      </>
+    );
   }
 
   // SUPER ADMIN (Platform Console)
   if (role === "super_admin") {
-    return <AdminDashboard user={session.user} onLogout={handleLogout} />;
+    return (
+      <>
+        <InstallPrompt />
+        <NearbyMeshControl role={role} />
+        <AdminDashboard user={session.user} onLogout={handleLogout} />
+      </>
+    );
   }
 
   // CONTROL (PANCHAYAT / DISTRICT AUTHORITY VERIFIED) continue to Control Centre below
@@ -615,7 +649,10 @@ function App() {
   // =========================================================
 
   return (
-    <div className="app">
+    <>
+      <InstallPrompt />
+      <NearbyMeshControl role={role} />
+      <div className="app">
 
       {/* =====================================================
           SIDEBAR
@@ -1887,7 +1924,8 @@ function App() {
 
       </main>
 
-    </div>
+      </div>
+    </>
   );
 }
 

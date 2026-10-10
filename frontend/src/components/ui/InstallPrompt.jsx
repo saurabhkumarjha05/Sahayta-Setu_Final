@@ -9,7 +9,8 @@ export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showPrompt, setShowPrompt] = useState(false);
   const userAgent = typeof window === 'undefined' ? '' : window.navigator.userAgent.toLowerCase();
-  const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+  const isIosDevice = /iphone|ipad|ipod/.test(userAgent) ||
+    (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = typeof window !== 'undefined' &&
     (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches);
   const isIos = isIosDevice && !isStandalone;
@@ -33,19 +34,31 @@ export function InstallPrompt() {
       setDeferredPrompt(e);
       setShowPrompt(true);
     };
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setShowPrompt(false);
+      localStorage.setItem(DISMISSED_KEY, 'true');
+    };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
   }, [isIos, isStandalone]);
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
+      try {
+        await deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
         setShowPrompt(false);
+      } catch (error) {
+        console.warn('PWA installation could not be started:', error);
+      } finally {
+        setDeferredPrompt(null);
       }
-      setDeferredPrompt(null);
     }
   };
 

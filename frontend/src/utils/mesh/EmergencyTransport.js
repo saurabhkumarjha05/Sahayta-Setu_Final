@@ -1,4 +1,15 @@
 import { API_URL, getToken } from '../../api';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const NearbyMesh = registerPlugin('NearbyMesh');
+
+export const hasNativeNearbyMesh = () =>
+  Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+
+export const startNativeNearbyMesh = () => NearbyMesh.start();
+export const stopNativeNearbyMesh = () => NearbyMesh.stop();
+export const addNativeMeshListener = (eventName, callback) =>
+  NearbyMesh.addListener(eventName, callback);
 
 /**
  * Base Emergency Transport
@@ -218,10 +229,31 @@ export class WebBluetoothTransport extends EmergencyTransport {
 export class FutureNativeMeshTransport extends EmergencyTransport {
   constructor() {
     super('FutureNativeMeshTransport');
-    this.nativeBridge =
-      typeof window !== 'undefined'
-        ? window.AndroidMeshBridge || window.Capacitor?.Plugins?.Mesh
-        : null;
+    this.nativeBridge = hasNativeNearbyMesh() ? NearbyMesh : null;
+    this.peerCount = 0;
+
+    if (this.nativeBridge) {
+      this.nativeBridge.addListener('meshPacketReceived', ({ packet }) => {
+        try {
+          const parsedPacket = JSON.parse(packet);
+          this.notifyReceived(parsedPacket);
+        } catch (error) {
+          console.warn('Ignoring invalid nearby SOS packet:', error.message);
+        }
+      }).catch((error) => {
+        console.warn('Nearby SOS listener could not be registered:', error.message);
+      });
+
+      this.nativeBridge.addListener('meshStatus', (status) => {
+        this.peerCount = Number(status.peerCount) || 0;
+        if (status.error) console.warn('Nearby SOS mesh status:', status.error);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sahayta:mesh-status', { detail: status }));
+        }
+      }).catch((error) => {
+        console.warn('Nearby SOS status listener could not be registered:', error.message);
+      });
+    }
   }
 
   isSupported() {
@@ -231,7 +263,9 @@ export class FutureNativeMeshTransport extends EmergencyTransport {
   async send(packet) {
     if (this.nativeBridge && typeof this.nativeBridge.broadcastEmergencyPacket === 'function') {
       try {
-        return await this.nativeBridge.broadcastEmergencyPacket(JSON.stringify(packet));
+        const result = await this.nativeBridge.broadcastEmergencyPacket({ packet: JSON.stringify(packet) });
+        this.peerCount = Number(result.peerCount) || 0;
+        return Number(result.sentCount) > 0;
       } catch (err) {
         console.warn('Native mesh broadcast error:', err);
       }
@@ -313,9 +347,11 @@ export class EmergencyTransportManager {
             : 'Unsupported by current browser'
       },
       nativeMesh: {
-        supported: Boolean(typeof window !== 'undefined' && (window.AndroidMeshBridge || window.Capacitor?.Plugins?.Mesh)),
-        active: false,
-        label: 'Native Mesh Capability: Planned / Adapter Ready (Android Wi-Fi Direct / Nearby Connections)'
+        supported: hasNativeNearbyMesh(),
+        active: this.transports.find((t) => t.name === 'FutureNativeMeshTransport')?.peerCount > 0,
+        label: hasNativeNearbyMesh()
+          ? 'Android Nearby Connections (Wi-Fi + Bluetooth)'
+          : 'Install the Android companion app for automatic nearby SOS relay'
       }
     };
   }
@@ -325,6 +361,9 @@ export class EmergencyTransportManager {
    */
   async dispatch(packet) {
     const results = {};
+    if (packet?.clientIncidentId) {
+      this.seenIncidentIds.add(packet.clientIncidentId);
+    }
 
     // 1. Try Internet first if online
     const internet = this.transports.find((t) => t.name === 'InternetTransport');
@@ -357,11 +396,12 @@ export class EmergencyTransportManager {
 
     // 3. Native mesh if available
     const nativeTransport = this.transports.find((t) => t.name === 'FutureNativeMeshTransport');
+    let nativeRelayed = false;
     if (nativeTransport && nativeTransport.isSupported()) {
-      await nativeTransport.send(packet);
+      nativeRelayed = await nativeTransport.send(packet);
     }
 
-    const hasPeer = localRelayed && local && local.hasActivePeer();
+    const hasPeer = (localRelayed && local && local.hasActivePeer()) || nativeRelayed;
     const commState = hasPeer ? 'LOCAL_RELAY_AVAILABLE' : 'OFFLINE_QUEUE_ONLY';
 
     return {
@@ -369,7 +409,7 @@ export class EmergencyTransportManager {
       queuedLocally: true,
       communicationState: commState,
       message: hasPeer
-        ? 'Broadcast to nearby local mesh peer. Stored safely in local emergency queue.'
+        ? 'Broadcast to a nearby device. SOS remains saved on this device until the authority server confirms receipt.'
         : 'Your SOS is securely stored on this device. No communication path is currently available.',
       results
     };
@@ -412,6 +452,9 @@ export class EmergencyTransportManager {
       maxHopCount: this.maxHopCount,
       relayDeviceId: 'peer-relay-device',
       relayTimestamp: new Date().toISOString(),
+      district: packet.district || null,
+      state: packet.state || null,
+      village: packet.village || null,
       payload: packet.originalPayload || packet.payload,
       signature: packet.originalSignature || packet.signature
     };
@@ -421,17 +464,23 @@ export class EmergencyTransportManager {
     );
 
     // If this device has Internet access, immediately forward the relayed packet to Sahayta Setu server!
+    let serverReceived = false;
     const internet = this.transports.find((t) => t.name === 'InternetTransport');
     if (internet && internet.isSupported()) {
       try {
         await internet.send(relayPacket);
+        serverReceived = true;
         console.log(`✓ Relayed SOS ${packet.clientIncidentId} successfully uploaded to Sahayta Setu server!`);
       } catch (err) {
         console.warn('Could not forward relay packet to server:', err.message);
       }
     }
 
-    this.onRelayReceivedCallbacks.forEach((cb) => cb(relayPacket));
+    this.onRelayReceivedCallbacks.forEach((cb) => {
+      Promise.resolve(cb(relayPacket, { serverReceived, transportName })).catch((error) => {
+        console.error('Could not store or forward relayed SOS:', error);
+      });
+    });
   }
 
   onRelayReceived(callback) {

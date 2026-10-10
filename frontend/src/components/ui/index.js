@@ -8,3 +8,4 @@ export { Skeleton } from './Skeleton';
 export { EmptyState } from './EmptyState';
 export { LanguageSwitcher } from './LanguageSwitcher';
 export { InstallPrompt } from './InstallPrompt';
+export { NearbyMeshControl } from './NearbyMeshControl';

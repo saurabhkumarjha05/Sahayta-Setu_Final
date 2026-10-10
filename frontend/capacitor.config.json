@@ -1,0 +1,8 @@
+{
+  "appId": "org.sahaytasetu.disastermanagement",
+  "appName": "Sahayta Setu",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
