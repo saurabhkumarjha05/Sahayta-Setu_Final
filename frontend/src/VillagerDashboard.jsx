@@ -20,8 +20,9 @@ import { getSocket, subscribeToDistrict } from "./utils/socketClient";
 import NearbyResourcesMap from "./components/map/NearbyResourcesMap";
 import { useI18n } from "./i18n";
 import { LanguageSwitcher, InstallPrompt, OfflineBanner, StatusStepper } from "./components/ui";
-import { getVerifiedShelters, calculateDistanceKm } from "./data/verifiedResources";
+import { calculateDistanceKm } from "./data/verifiedResources";
 import { findDistrictCoordinates } from "./data/indiaLocations";
+import { DEFAULT_STATE, DEFAULT_DISTRICT } from "./config/locationConfig";
 
 function VillagerDashboard({ user, onLogout }) {
   const { t } = useI18n();
@@ -36,12 +37,12 @@ function VillagerDashboard({ user, onLogout }) {
   const [alerts, setAlerts] = useState([]);
 
   // Location selector state
-  const [selectedState, setSelectedState] = useState(user?.state || "Uttarakhand");
-  const [selectedDistrict, setSelectedDistrict] = useState(user?.district || "Dehradun");
+  const [selectedState, setSelectedState] = useState(user?.state || DEFAULT_STATE);
+  const [selectedDistrict, setSelectedDistrict] = useState(user?.district || DEFAULT_DISTRICT);
   const [isGpsActive, setIsGpsActive] = useState(false);
   const [userPos, setUserPos] = useState(() => {
-    const coords = findDistrictCoordinates(user?.district || "Dehradun", user?.state || "Uttarakhand");
-    return coords ? [coords.lat, coords.lng] : [30.3165, 78.0322];
+    const coords = findDistrictCoordinates(user?.district || DEFAULT_DISTRICT, user?.state || DEFAULT_STATE);
+    return coords ? [coords.lat, coords.lng] : undefined;
   });
 
   const evacuationRef = useRef(null);
@@ -111,37 +112,20 @@ function VillagerDashboard({ user, onLogout }) {
     try {
       const query = `?state=${encodeURIComponent(selectedState)}&district=${encodeURIComponent(selectedDistrict)}`;
       const data = await apiFetch(`/api/shelters${query}`);
-      const list = Array.isArray(data) && data.length > 0
-        ? data
-        : getVerifiedShelters(selectedState, selectedDistrict).map(v => ({
-            _id: v.id,
-            name: v.name,
-            lat: v.latitude,
-            lng: v.longitude,
-            capacity: v.capacity,
-            currentOccupancy: v.currentOccupancy,
-            availableSpaces: Math.max(0, v.capacity - v.currentOccupancy),
-            status: v.status,
-            type: v.type,
-            verified: v.verified
-          }));
-      setShelters(list);
-    } catch {
-      const fallback = getVerifiedShelters(selectedState, selectedDistrict).map(v => ({
-        _id: v.id,
-        name: v.name,
-        lat: v.latitude,
-        lng: v.longitude,
-        capacity: v.capacity,
-        currentOccupancy: v.currentOccupancy,
-        availableSpaces: Math.max(0, v.capacity - v.currentOccupancy),
-        status: v.status,
-        type: v.type,
-        verified: v.verified
-      }));
-      setShelters(fallback);
+      const list = Array.isArray(data) ? data : [];
+      setShelters(list.filter((shelter) =>
+        shelter.status === 'ACTIVE'
+        && shelter.verified !== false
+        && Number(shelter.availableSpaces) > 0
+        && Number.isFinite(Number(shelter.lat))
+        && Number.isFinite(Number(shelter.lng))
+        && calculateDistanceKm(userPos, [Number(shelter.lat), Number(shelter.lng)]) <= 25
+      ));
+    } catch (error) {
+      console.warn("Live shelter lookup failed:", error.message);
+      setShelters([]);
     }
-  }, [selectedState, selectedDistrict]);
+  }, [selectedState, selectedDistrict, userPos]);
 
   useEffect(() => {
     const initialLoad = setTimeout(loadShelters, 0);
@@ -284,7 +268,11 @@ function VillagerDashboard({ user, onLogout }) {
       isFull: s.status === "Full" || (s.capacity > 0 && s.currentOccupancy >= s.capacity)
     }))
     .sort((a, b) => a.distance - b.distance);
-  const nearestOpenId = sortedResources.find((s) => !s.isFull)?._id;
+  const eligibleNearbyResources = sortedResources.filter((s) =>
+    !s.isFull && s.status !== 'CLOSED' && Number(s.availableSpaces ?? s.capacity - s.currentOccupancy) > 0
+    && s.distance <= 25
+  );
+  const nearestOpenId = eligibleNearbyResources[0]?._id;
 
   const latestAlert = alerts[0];
 
@@ -760,11 +748,11 @@ function VillagerDashboard({ user, onLogout }) {
               </div>
             </div>
 
-            {sortedResources.length === 0 && (
-              <p className="shelter-empty">No public shelters listed for {selectedDistrict} yet.</p>
+            {eligibleNearbyResources.length === 0 && (
+              <p className="shelter-empty">No verified open shelter with available capacity was found within 25 km of your current map location.</p>
             )}
 
-            {sortedResources.slice(0, 3).map((res) => {
+            {eligibleNearbyResources.slice(0, 3).map((res) => {
               const icon = res.type === 'Hospital' ? '🏥' : res._id === nearestOpenId ? '⭐' : '🏠';
               return (
                 <div className="shelter-card" key={res._id}>
@@ -779,7 +767,7 @@ function VillagerDashboard({ user, onLogout }) {
                       style={{ fontSize: '0.75rem', color: '#166534', marginTop: '2px' }}
                       title="Verified by Sahayta Setu's authorized platform administrator"
                     >
-                      {res.type || 'Relief Centre'} · {res.verified ? '✓ Verified Resource' : 'Community Facility'}
+                      {res.type || 'Relief Centre'} · ✓ Verified · {res.availableSpaces} spaces available
                     </div>
                   </div>
                   <span className={res.isFull ? "shelter-full" : "available"}>

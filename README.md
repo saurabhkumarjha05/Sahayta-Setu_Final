@@ -12,6 +12,14 @@ Lead of **Team Byte CodeX** · Build for Bharat · Domain: Disaster Management
 
 ## Install and test the mobile PWA
 
+### Intelligence and geographic data configuration
+
+Set `TINYFISH_API_KEY` only in the backend environment to enable the official TinyFish Search API integration. Search results are restricted to HTTPS `.gov.in` and `.nic.in` sources, returned as unverified source candidates, and are not treated as confirmed alerts. Without the key (or if the service is unavailable), core SOS reporting continues and the intelligence endpoint returns an explicit unavailable/error response. Incident priority and urgent-needs analysis currently uses explainable deterministic rules; it is advisory and cannot issue evacuation orders.
+
+Optional Web Push requires backend-only `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_EMAIL`. Do not expose backend secrets through `VITE_*` variables. The map's default view is Uttar Pradesh → Gautam Buddha Nagar; a district center is approximate and must not be presented as an individual's GPS position. Exact district-boundary geofencing is not available without a vetted boundary dataset. Evacuation records are family-status reports rather than versioned, approved operational evacuation plans.
+
+Run the focused intelligence tests with `npm --prefix backend run test:intelligence`; the existing backend suite is `npm --prefix backend test`, and the frontend production build/lint commands are run from `frontend`.
+
 The PWA is the installable browser version of the web app. It needs an HTTPS URL (or `localhost` on the same phone) for installation and Service Worker support. For a phone test, deploy the frontend and backend to a staging environment first; use one HTTPS origin with `/api` and `/socket.io` reverse-proxied to the backend where possible. If the API has a separate origin, set `VITE_API_URL` to that HTTPS API origin at frontend build time and allow the frontend origin in the backend's `CORS_ORIGINS`.
 
 Do not use a real emergency or production authority accounts for testing. Test SOS, alerts, push notifications, and responder actions can create operational records or contact real subscribers. Use a staging database, test accounts, and disabled/test-only SMS and push integrations.

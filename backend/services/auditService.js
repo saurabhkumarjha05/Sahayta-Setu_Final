@@ -20,7 +20,7 @@ async function logAuditEvent({
   details = {}
 }) {
   const entry = {
-    _id: `audit-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    _id: new mongoose.Types.ObjectId(),
     actorId: String(actorId),
     actorName: String(actorName),
     actorRole: String(actorRole),
@@ -38,18 +38,12 @@ async function logAuditEvent({
     timestamp: new Date()
   };
 
-  // Add to memory ring buffer
-  memoryAuditLogs.unshift(entry);
-  if (memoryAuditLogs.length > MAX_MEMORY_LOGS) {
-    memoryAuditLogs.pop();
-  }
-
-  // Persist to MongoDB if active
   if (mongoose.connection && mongoose.connection.readyState === 1) {
-    try {
-      await AuditLog.create(entry);
-    } catch (err) {
-      console.warn('AuditLog persistence warning:', err.message);
+    await AuditLog.create(entry);
+  } else {
+    memoryAuditLogs.unshift(entry);
+    if (memoryAuditLogs.length > MAX_MEMORY_LOGS) {
+      memoryAuditLogs.pop();
     }
   }
 
@@ -63,15 +57,11 @@ async function queryAuditLogs(filters = {}) {
   const { action, district, state, limit = 50 } = filters;
 
   if (mongoose.connection && mongoose.connection.readyState === 1) {
-    try {
-      const query = {};
-      if (action) query.action = action;
-      if (district) query['jurisdiction.district'] = new RegExp(`^${district}$`, 'i');
-      if (state) query['jurisdiction.state'] = new RegExp(`^${state}$`, 'i');
-      return await AuditLog.find(query).sort({ timestamp: -1 }).limit(Number(limit));
-    } catch {
-      // Fallback to memory
-    }
+    const query = {};
+    if (action) query.action = action;
+    if (district) query['jurisdiction.district'] = new RegExp(`^${district}$`, 'i');
+    if (state) query['jurisdiction.state'] = new RegExp(`^${state}$`, 'i');
+    return await AuditLog.find(query).sort({ timestamp: -1 }).limit(Number(limit));
   }
 
   let results = [...memoryAuditLogs];

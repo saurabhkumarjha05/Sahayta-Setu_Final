@@ -11,7 +11,6 @@ const { validateAuthInput, normalizeEmail } = require('./utils/validation');
 const { getRainfall, getRainfall24h, getRainfall24hMany } = require('./services/weather');
 const { calculateRisk } = require('./services/risk');
 const DistrictRainfall = require('./models/districtRainfall');
-const { getVerifiedShelters } = require('./data/verifiedResources');
 const http = require('http');
 const express = require('express');
 const mongoose = require('mongoose');
@@ -20,7 +19,9 @@ const cors = require('cors');
 const { registerDevice, revokeDevice, validateEmergencyPacket, findDevice, deviceStore } = require('./services/cryptoService');
 const { calculateDistanceKm, matchNearestResponders } = require('./services/matchingService');
 const { verifyJurisdiction, filterByJurisdiction, maskLocationForPrivacy } = require('./services/geoAuth');
-const { logAuditEvent, queryAuditLogs, memoryAuditLogs } = require('./services/auditService');
+const { logAuditEvent, queryAuditLogs } = require('./services/auditService');
+const { collectDisasterAlerts } = require('./services/tinyFishService');
+const { analyzeIncidentReport, detectDuplicateIncidents, generateAutomatedReport } = require('./services/aiIntelligenceService');
 const VerifiedEntity = require('./models/verifiedEntity');
 const AuditLog = require('./models/auditLog');
 const {
@@ -1215,6 +1216,9 @@ app.post('/api/auth/devices/revoke', optionalAuth, async (req, res) => {
 
 // Get Web Push VAPID Public Key
 app.get('/api/alerts/vapid-public-key', (req, res) => {
+  if (!VAPID_PUBLIC_KEY) {
+    return res.status(503).json({ error: 'Web Push is not configured on this server.' });
+  }
   res.json({ publicKey: VAPID_PUBLIC_KEY });
 });
 
@@ -1303,9 +1307,76 @@ const Alert = require('./models/alert');
 const EvacuationReport = require('./models/evacuationReport');
 const { LEVEL_COLORS, buildAlertMessage, deliverSMS } = require('./services/alerts');
 
+app.get('/api/intelligence/tinyfish-alerts', requireRole('control', 'ngo', 'super_admin'), requireVerified, async (req, res) => {
+  const state = String(req.query.state || req.user.state || '').trim();
+  const district = String(req.query.district || req.user.district || '').trim();
+  if (!state || !district) {
+    return res.status(400).json({ error: 'Select an authorized state and district before searching official alerts.' });
+  }
+
+  const jurisdiction = verifyJurisdiction(req.user, { state, district });
+  if (!jurisdiction.allowed) {
+    return res.status(403).json({ error: jurisdiction.reason, code: 'GEO_AUTHORIZATION_DENIED' });
+  }
+
+  try {
+    const alerts = await collectDisasterAlerts({ state, district });
+    return res.json({ alerts, collectedAt: new Date().toISOString(), source: 'TinyFish Search API' });
+  } catch (error) {
+    console.error('TinyFish alert search failed:', error.message);
+    const status = error.code === 'TINYFISH_NOT_CONFIGURED' ? 503 : 502;
+    return res.status(status).json({
+      error: error.code === 'TINYFISH_NOT_CONFIGURED'
+        ? 'Official web intelligence is not configured. Incident reporting remains available.'
+        : 'Unable to retrieve source-backed official alerts right now.',
+      code: error.code || 'TINYFISH_SEARCH_FAILED'
+    });
+  }
+});
+
+app.get('/api/sos/:id/intelligence-report', requireRole('control', 'super_admin'), requireVerified, async (req, res) => {
+  try {
+    const incident = isDbMode()
+      ? await SOS.findOne(mongoose.isValidObjectId(req.params.id)
+        ? { $or: [{ _id: req.params.id }, { clientIncidentId: req.params.id }] }
+        : { clientIncidentId: req.params.id }).lean()
+      : memoryStore.sos.find((item) => String(item._id) === req.params.id
+        || item.clientIncidentId === req.params.id);
+
+    if (!incident) return res.status(404).json({ error: 'Incident not found.' });
+    const jurisdiction = verifyJurisdiction(req.user, { state: incident.state, district: incident.district });
+    if (!jurisdiction.allowed) {
+      return res.status(403).json({ error: jurisdiction.reason, code: 'GEO_AUTHORIZATION_DENIED' });
+    }
+
+    const analysis = analyzeIncidentReport(incident);
+    const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+    const nearbyIncidents = isDbMode()
+      ? await SOS.find({
+        _id: { $ne: incident._id },
+        district: incident.district,
+        state: incident.state,
+        timestamp: { $gte: cutoff }
+      }).lean()
+      : memoryStore.sos.filter((item) => String(item._id) !== String(incident._id));
+
+    return res.json({
+      ...generateAutomatedReport({ incident, analysis }),
+      analysis,
+      possibleDuplicates: detectDuplicateIncidents(incident, nearbyIncidents)
+    });
+  } catch (error) {
+    console.error('Incident intelligence report failed:', error.message);
+    return res.status(500).json({ error: 'Unable to generate the incident analysis report.' });
+  }
+});
+
 app.get('/api/risk-zones', async (req, res) => {
   try {
-    const zones = await RiskZone.find();
+    const filter = {};
+    if (req.query.state) filter.state = new RegExp(`^${String(req.query.state).trim()}$`, 'i');
+    if (req.query.district) filter.district = new RegExp(`^${String(req.query.district).trim()}$`, 'i');
+    const zones = await RiskZone.find(filter);
     res.json(zones);
   } catch (err) {
     console.error('Risk zone lookup failed:', err.message);
@@ -1315,19 +1386,51 @@ app.get('/api/risk-zones', async (req, res) => {
 
 // GET /api/shelters
 // Returns active/open registered shelters & relief facilities from MongoDB
-app.get('/api/shelters', async (req, res) => {
+app.get('/api/shelters', optionalAuth, async (req, res) => {
   const { state, district } = req.query;
   try {
     let dbShelters = [];
     if (mongoose.connection && mongoose.connection.readyState === 1) {
-      const filter = { status: { $ne: 'CLOSED' } };
-      if (state) filter.state = new RegExp(`^${state.trim()}$`, 'i');
-      if (district) filter.district = new RegExp(`^${district.trim()}$`, 'i');
+      const includeClosed = req.query.includeClosed === 'true';
+      if (includeClosed && (!req.user || !['control', 'ngo', 'super_admin'].includes(req.user.role))) {
+        return res.status(403).json({ error: 'Only authorized resource managers can view inactive shelters.' });
+      }
+      if (includeClosed) {
+        const selectedState = state || req.user.state;
+        const selectedDistrict = district || req.user.district;
+        const jurisdiction = verifyJurisdiction(req.user, { state: selectedState, district: selectedDistrict });
+        if (!jurisdiction.allowed) {
+          return res.status(403).json({ error: jurisdiction.reason, code: 'GEO_AUTHORIZATION_DENIED' });
+        }
+      }
+      const filter = includeClosed
+        ? {}
+        : { status: { $ne: 'CLOSED' }, removedAt: null };
+      const selectedState = state || (includeClosed ? req.user.state : null);
+      const selectedDistrict = district || (includeClosed ? req.user.district : null);
+      if (selectedState) filter.state = new RegExp(`^${String(selectedState).trim()}$`, 'i');
+      if (selectedDistrict) filter.district = new RegExp(`^${String(selectedDistrict).trim()}$`, 'i');
       dbShelters = await Shelter.find(filter).sort({ name: 1 }).lean();
     } else if (process.env.NODE_ENV === 'test') {
-      dbShelters = (memoryStore.shelters || []).filter((s) => s.status !== 'CLOSED');
-      if (state) dbShelters = dbShelters.filter((s) => !s.state || s.state.toLowerCase() === state.toLowerCase());
-      if (district) dbShelters = dbShelters.filter((s) => !s.district || s.district.toLowerCase() === district.toLowerCase());
+      const includeClosed = req.query.includeClosed === 'true';
+      if (includeClosed && (!req.user || !['control', 'ngo', 'super_admin'].includes(req.user.role))) {
+        return res.status(403).json({ error: 'Only authorized resource managers can view inactive shelters.' });
+      }
+      if (includeClosed) {
+        const selectedState = state || req.user.state;
+        const selectedDistrict = district || req.user.district;
+        const jurisdiction = verifyJurisdiction(req.user, { state: selectedState, district: selectedDistrict });
+        if (!jurisdiction.allowed) {
+          return res.status(403).json({ error: jurisdiction.reason, code: 'GEO_AUTHORIZATION_DENIED' });
+        }
+      }
+      const selectedState = state || (includeClosed ? req.user.state : null);
+      const selectedDistrict = district || (includeClosed ? req.user.district : null);
+      dbShelters = (memoryStore.shelters || []).filter((s) =>
+        includeClosed || (s.status !== 'CLOSED' && !s.removedAt)
+      );
+      if (selectedState) dbShelters = dbShelters.filter((s) => !s.state || s.state.toLowerCase() === selectedState.toLowerCase());
+      if (selectedDistrict) dbShelters = dbShelters.filter((s) => !s.district || s.district.toLowerCase() === selectedDistrict.toLowerCase());
     }
 
     const formatted = dbShelters.map((s) => ({
@@ -1353,7 +1456,8 @@ app.get('/api/shelters', async (req, res) => {
       servicesOffered: s.servicesOffered || ['Shelter', 'Emergency Relief'],
       organizationId: s.organizationId,
       organizationName: s.organizationName,
-      verified: Boolean(s.verified !== false)
+      verified: Boolean(s.verified !== false),
+      removedAt: s.removedAt || null
     }));
 
     res.json(formatted);
@@ -1368,22 +1472,50 @@ function computeShelterStatus(capacity, occupancy) {
   return 'ACTIVE';
 }
 
+function canManageShelter(user, shelter) {
+  const jurisdiction = verifyJurisdiction(user, { state: shelter.state, district: shelter.district });
+  if (!jurisdiction.allowed) return jurisdiction;
+  if (user.role === 'ngo') {
+    const userId = String(user.id || user._id || '');
+    const creatorId = String(shelter.createdBy || '');
+    const userOrganizationId = String(user.organizationId || '');
+    const shelterOrganizationId = String(shelter.organizationId || '');
+    if (userId !== creatorId && (!userOrganizationId || userOrganizationId !== shelterOrganizationId)) {
+      return { allowed: false, reason: 'NGOs may manage only shelters they created or that belong to their organization.' };
+    }
+  }
+  return { allowed: true };
+}
+
+async function flagShelterEvacueesForReview(shelter, reason) {
+  if (isDbMode() && shelter?._id) {
+    await EvacuationReport.updateMany(
+      { shelter: shelter._id },
+      { $set: { needsReview: true, reviewReason: reason } }
+    );
+  }
+}
+
 /**
  * GET /api/resources/nearby
  * Realtime nearby resources endpoint with strict civilian privacy masking,
  * geo-authorization, distance sorting, and auto-expanding radius (5 > 10 > 25 km).
- * Query params: lat, lng, radius (default 5), types (all | shelter,ngo,medical,relief), state, district
+ * Query params: lat, lng, radius (default 5 km), types (all | shelter,ngo,medical,relief), state, district
  */
 app.get('/api/resources/nearby', optionalAuth, async (req, res) => {
   const numLat = parseFloat(req.query.lat);
   const numLng = parseFloat(req.query.lng);
-  const requestedRadius = parseFloat(req.query.radius) || 5;
+  const requestedRadius = req.query.radius === undefined ? 5 : Number(req.query.radius);
   const typesParam = (req.query.types || 'all').toLowerCase();
   const selectedState = req.query.state || '';
   const selectedDistrict = req.query.district || '';
 
-  if (!Number.isFinite(numLat) || !Number.isFinite(numLng)) {
+  if (!Number.isFinite(numLat) || numLat < -90 || numLat > 90
+    || !Number.isFinite(numLng) || numLng < -180 || numLng > 180) {
     return res.status(400).json({ error: 'Valid lat and lng query parameters are required' });
+  }
+  if (!Number.isFinite(requestedRadius) || requestedRadius <= 0 || requestedRadius > 50) {
+    return res.status(400).json({ error: 'Radius must be greater than 0 and no more than 50 km.' });
   }
 
   // Geo-authorization check if authorized token is present
@@ -1404,7 +1536,11 @@ app.get('/api/resources/nearby', optionalAuth, async (req, res) => {
   let allFacilities = [];
   try {
     if (isDbMode()) {
-      const filter = { status: { $in: ['ACTIVE', 'Available', 'Full', 'FULL'] }, verified: { $ne: false } };
+      const filter = {
+        status: { $in: ['ACTIVE', 'Available'] },
+        verified: { $ne: false },
+        removedAt: null
+      };
       if (selectedState) filter.state = new RegExp(`^${selectedState.trim()}$`, 'i');
       if (selectedDistrict) filter.district = new RegExp(`^${selectedDistrict.trim()}$`, 'i');
       allFacilities = await Shelter.find(filter).lean();
@@ -1412,7 +1548,8 @@ app.get('/api/resources/nearby', optionalAuth, async (req, res) => {
       allFacilities = (memoryStore.shelters || []).filter((s) => s.status !== 'CLOSED');
     }
   } catch (err) {
-    allFacilities = [];
+    console.error('Nearby shelter lookup failed:', err.message);
+    return res.status(500).json({ error: 'Unable to load nearby shelters.' });
   }
 
   // Gather verified NGOs / responders
@@ -1424,7 +1561,8 @@ app.get('/api/resources/nearby', optionalAuth, async (req, res) => {
       allNgos = memoryStore.ngos || [];
     }
   } catch (err) {
-    allNgos = [];
+    console.error('Nearby responder lookup failed:', err.message);
+    return res.status(500).json({ error: 'Unable to load nearby responders.' });
   }
 
   // Helper to filter and calculate distances at radius R
@@ -1454,7 +1592,7 @@ app.get('/api/resources/nearby', optionalAuth, async (req, res) => {
           verified: Boolean(f.verified !== false)
         };
       })
-      .filter((f) => f.distanceKm <= radiusKm);
+      .filter((f) => f.distanceKm <= radiusKm && f.availableSpaces > 0);
 
     // 2. Count verified NGOs / volunteers within radius
     // Civilian privacy: NEVER expose exact volunteer coordinates or personal contact phone!
@@ -1472,27 +1610,8 @@ app.get('/api/resources/nearby', optionalAuth, async (req, res) => {
     return { facilities: validFacilities, volunteerCount };
   };
 
-  // Step-by-step radius expansion: requestedRadius -> 10km -> 25km
-  const radiiSteps = [requestedRadius];
-  if (!radiiSteps.includes(10) && requestedRadius < 10) radiiSteps.push(10);
-  if (!radiiSteps.includes(25) && requestedRadius < 25) radiiSteps.push(25);
-
-  let finalRadius = requestedRadius;
-  let result = evaluateAtRadius(finalRadius);
-
-  // If no public facilities found in initial radius, auto-expand
-  if (result.facilities.length === 0) {
-    for (const step of radiiSteps) {
-      if (step > finalRadius) {
-        const nextResult = evaluateAtRadius(step);
-        if (nextResult.facilities.length > 0 || nextResult.volunteerCount > 0) {
-          finalRadius = step;
-          result = nextResult;
-          break;
-        }
-      }
-    }
-  }
+  const finalRadius = requestedRadius;
+  const result = evaluateAtRadius(finalRadius);
 
   // Type filter if requested (e.g. types=medical or types=shelter)
   let filteredFacilities = result.facilities;
@@ -1513,7 +1632,7 @@ app.get('/api/resources/nearby', optionalAuth, async (req, res) => {
     count: result.volunteerCount,
     radiusKm: finalRadius,
     message: `${result.volunteerCount} verified volunteers available within ${finalRadius} km`,
-    contactRoute: 'Request dispatch via Gram Panchayat Control Centre'
+    contactRoute: 'Request dispatch through your local Authority'
   };
 
   // Short-lived cache suitable for dynamic availability
@@ -1524,7 +1643,10 @@ app.get('/api/resources/nearby', optionalAuth, async (req, res) => {
     userCoords: [numLat, numLng],
     radiusKm: finalRadius,
     originalRadius: requestedRadius,
-    expanded: finalRadius > requestedRadius,
+    expanded: false,
+    message: filteredFacilities.length === 0
+      ? `No verified, open shelter with available capacity was found within ${finalRadius} km.`
+      : null,
     totalFacilities: filteredFacilities.length,
     resources: filteredFacilities,
     volunteerSummary
@@ -1536,28 +1658,33 @@ app.post('/api/shelters', requireRole('control', 'ngo', 'super_admin'), requireV
   const { name, type, capacity, address, servicesOffered, publicContact, state, district, stateCode, districtCode, blockCode, panchayatId } = req.body;
   const lat = req.body.lat !== undefined ? req.body.lat : req.body.location?.lat;
   const lng = req.body.lng !== undefined ? req.body.lng : req.body.location?.lng;
-  const occupancy = Number(req.body.occupancy || req.body.currentOccupancy) || 0;
+  const occupancy = Number(req.body.occupancy ?? req.body.currentOccupancy ?? 0);
 
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: 'Please provide the shelter / resource name' });
   }
-  if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+  if (!Number.isFinite(Number(lat)) || Number(lat) < 6 || Number(lat) > 38
+    || !Number.isFinite(Number(lng)) || Number(lng) < 68 || Number(lng) > 98) {
     return res.status(400).json({ error: 'Please provide valid latitude and longitude coordinates' });
   }
-  if (!(Number(capacity) > 0)) {
-    return res.status(400).json({ error: 'Capacity must be greater than 0' });
+  if (!Number.isInteger(Number(capacity)) || Number(capacity) < 1 || Number(capacity) > 100000) {
+    return res.status(400).json({ error: 'Capacity must be a whole number between 1 and 100000.' });
+  }
+  if (!Number.isInteger(occupancy) || occupancy < 0 || occupancy > Number(capacity)) {
+    return res.status(400).json({ error: 'Occupancy must be a whole number between 0 and the shelter capacity.' });
   }
 
   // Geo-authorization: control authority must be within their jurisdiction
   const user = req.user;
   const shelterState = state || user.state;
   const shelterDistrict = district || user.district;
+  if (!shelterState || !shelterDistrict) {
+    return res.status(400).json({ error: 'A state and district are required to register a shelter.' });
+  }
 
-  if (user.role === 'control' || user.role === 'panchayat' || user.role === 'district_authority') {
-    const check = verifyJurisdiction(user, { state: shelterState, district: shelterDistrict });
-    if (!check.allowed) {
-      return res.status(403).json({ error: check.reason, code: 'GEO_AUTHORIZATION_DENIED' });
-    }
+  const jurisdictionCheck = verifyJurisdiction(user, { state: shelterState, district: shelterDistrict });
+  if (!jurisdictionCheck.allowed) {
+    return res.status(403).json({ error: jurisdictionCheck.reason, code: 'GEO_AUTHORIZATION_DENIED' });
   }
 
   try {
@@ -1646,33 +1773,41 @@ app.patch('/api/shelters/:id', requireRole('control', 'ngo'), requireVerified, a
       if (!shelter) return res.status(404).json({ error: 'Shelter not found' });
 
       // Geo-auth check
-      if (user.role === 'control' || user.role === 'panchayat') {
-        const check = verifyJurisdiction(user, { state: shelter.state, district: shelter.district });
-        if (!check.allowed) {
-          return res.status(403).json({ error: check.reason, code: 'GEO_AUTHORIZATION_DENIED' });
-        }
+      const managementCheck = canManageShelter(user, shelter);
+      if (!managementCheck.allowed) {
+        return res.status(403).json({ error: managementCheck.reason, code: 'GEO_AUTHORIZATION_DENIED' });
       }
 
       if (req.body.capacity !== undefined) {
         const cap = Number(req.body.capacity);
-        if (!(cap > 0)) return res.status(400).json({ error: 'Capacity must be greater than 0' });
+        if (!Number.isInteger(cap) || cap < 1 || cap > 100000) {
+          return res.status(400).json({ error: 'Capacity must be a whole number between 1 and 100000.' });
+        }
+        if (cap < shelter.currentOccupancy) {
+          return res.status(409).json({ error: 'Capacity cannot be reduced below current occupancy.' });
+        }
         shelter.capacity = cap;
       }
 
       if (req.body.occupancy !== undefined || req.body.currentOccupancy !== undefined) {
         const occ = Number(req.body.occupancy !== undefined ? req.body.occupancy : req.body.currentOccupancy);
-        if (!Number.isFinite(occ) || occ < 0) return res.status(400).json({ error: 'Occupancy must be 0 or more' });
-        shelter.occupancy = Math.min(occ, shelter.capacity);
+        if (!Number.isInteger(occ) || occ < 0 || occ > shelter.capacity) {
+          return res.status(400).json({ error: 'Occupancy must be a whole number within the registered capacity.' });
+        }
+        shelter.occupancy = occ;
         shelter.currentOccupancy = shelter.occupancy;
       }
 
       if (req.body.status) {
         const st = String(req.body.status).toUpperCase();
-        if (['ACTIVE', 'FULL', 'CLOSED'].includes(st)) {
-          shelter.status = st;
+        if (!['ACTIVE', 'FULL', 'CLOSED'].includes(st)) {
+          return res.status(400).json({ error: 'Status must be ACTIVE, FULL, or CLOSED.' });
         }
+        shelter.status = st;
       } else {
-        shelter.status = computeShelterStatus(shelter.capacity, shelter.currentOccupancy);
+        if (shelter.status !== 'CLOSED') {
+          shelter.status = computeShelterStatus(shelter.capacity, shelter.currentOccupancy);
+        }
       }
 
       if (req.body.publicContact !== undefined) shelter.publicContact = req.body.publicContact;
@@ -1681,15 +1816,45 @@ app.patch('/api/shelters/:id', requireRole('control', 'ngo'), requireVerified, a
 
       shelter.lastStatusAt = new Date();
       await shelter.save();
+      if (shelter.status === 'CLOSED') {
+        await flagShelterEvacueesForReview(shelter, 'The assigned shelter is closed.');
+      } else if (req.body.capacity !== undefined) {
+        const [occupancy] = await EvacuationReport.aggregate([
+          { $match: { shelter: shelter._id } },
+          { $group: { _id: null, people: { $sum: '$inShelter' } } }
+        ]);
+        if (occupancy && shelter.capacity < shelter.currentOccupancy + occupancy.people) {
+          await flagShelterEvacueesForReview(shelter, 'Shelter capacity changed; assigned evacuation reports need review.');
+        }
+      }
     } else if (process.env.NODE_ENV === 'test') {
       shelter = (memoryStore.shelters || []).find((s) => String(s._id) === String(id) || String(s.id) === String(id));
       if (!shelter) return res.status(404).json({ error: 'Shelter not found' });
-      if (req.body.capacity) shelter.capacity = Number(req.body.capacity);
+      if (req.body.capacity !== undefined) {
+        const capacity = Number(req.body.capacity);
+        if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100000) {
+          return res.status(400).json({ error: 'Capacity must be a whole number between 1 and 100000.' });
+        }
+        if (capacity < (shelter.currentOccupancy || shelter.occupancy || 0)) {
+          return res.status(409).json({ error: 'Capacity cannot be reduced below current occupancy.' });
+        }
+        shelter.capacity = capacity;
+      }
       if (req.body.currentOccupancy !== undefined) shelter.currentOccupancy = Number(req.body.currentOccupancy);
       shelter.status = computeShelterStatus(shelter.capacity, shelter.currentOccupancy || 0);
     }
 
     emitResourceUpdated(shelter);
+    await logAuditEvent({
+      actorId: user.id,
+      actorName: user.name,
+      actorRole: user.role,
+      action: 'SHELTER_UPDATED',
+      targetId: id,
+      targetType: 'Shelter',
+      jurisdiction: { state: shelter.state, district: shelter.district },
+      details: { capacity: shelter.capacity, occupancy: shelter.currentOccupancy || shelter.occupancy, status: shelter.status }
+    });
 
     res.json(shelter);
   } catch (err) {
@@ -1698,7 +1863,7 @@ app.patch('/api/shelters/:id', requireRole('control', 'ngo'), requireVerified, a
 });
 
 // Remove or close a shelter
-app.delete('/api/shelters/:id', requireRole('control', 'ngo'), requireVerified, async (req, res) => {
+app.delete('/api/shelters/:id', requireRole('control', 'ngo', 'super_admin'), requireVerified, async (req, res) => {
   const { id } = req.params;
   const user = req.user;
 
@@ -1711,28 +1876,39 @@ app.delete('/api/shelters/:id', requireRole('control', 'ngo'), requireVerified, 
       shelter = await Shelter.findById(id);
       if (!shelter) return res.status(404).json({ error: 'Shelter not found' });
 
-      // Geo-auth check
-      if (user.role === 'control' || user.role === 'panchayat') {
-        const check = verifyJurisdiction(user, { state: shelter.state, district: shelter.district });
-        if (!check.allowed) {
-          return res.status(403).json({ error: check.reason, code: 'GEO_AUTHORIZATION_DENIED' });
-        }
+      const managementCheck = canManageShelter(user, shelter);
+      if (!managementCheck.allowed) {
+        return res.status(403).json({ error: managementCheck.reason, code: 'GEO_AUTHORIZATION_DENIED' });
       }
 
-      await Shelter.findByIdAndDelete(id);
+      shelter.removedAt = new Date();
+      shelter.status = 'CLOSED';
+      shelter.lastStatusAt = new Date();
+      await shelter.save();
     } else if (process.env.NODE_ENV === 'test') {
-      const idx = (memoryStore.shelters || []).findIndex((s) => String(s._id) === String(id) || String(s.id) === String(id));
-      if (idx !== -1) {
-        shelter = memoryStore.shelters[idx];
-        memoryStore.shelters.splice(idx, 1);
+      shelter = (memoryStore.shelters || []).find((s) => String(s._id) === String(id) || String(s.id) === String(id));
+      if (shelter) {
+        shelter.removedAt = new Date();
+        shelter.status = 'CLOSED';
       }
     }
 
     if (!shelter) return res.status(404).json({ error: 'Shelter not found' });
 
+    await flagShelterEvacueesForReview(shelter, 'The assigned shelter was removed from operations.');
     emitResourceClosed(id, { district: shelter.district, name: shelter.name });
 
-    res.json({ message: 'Shelter removed successfully', id });
+    await logAuditEvent({
+      actorId: user.id,
+      actorName: user.name,
+      actorRole: user.role,
+      action: 'SHELTER_REMOVED',
+      targetId: id,
+      targetType: 'Shelter',
+      jurisdiction: { state: shelter.state, district: shelter.district },
+      details: { name: shelter.name, removedAt: shelter.removedAt }
+    });
+    res.json({ message: 'Shelter removed from active operations. It can be restored by an authorized resource manager.', id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1750,14 +1926,15 @@ app.post('/api/shelters/:id/close', requireRole('control', 'ngo', 'super_admin')
       shelter = await Shelter.findById(id);
       if (!shelter) return res.status(404).json({ error: 'Shelter not found' });
 
-      if (user.role === 'control' || user.role === 'panchayat') {
-        const check = verifyJurisdiction(user, { state: shelter.state, district: shelter.district });
-        if (!check.allowed) return res.status(403).json({ error: check.reason, code: 'GEO_AUTHORIZATION_DENIED' });
+      const managementCheck = canManageShelter(user, shelter);
+      if (!managementCheck.allowed) {
+        return res.status(403).json({ error: managementCheck.reason, code: 'GEO_AUTHORIZATION_DENIED' });
       }
 
       shelter.status = 'CLOSED';
       shelter.lastStatusAt = new Date();
       await shelter.save();
+      await flagShelterEvacueesForReview(shelter, 'The assigned shelter is closed.');
     } else if (process.env.NODE_ENV === 'test') {
       shelter = (memoryStore.shelters || []).find((s) => String(s._id) === String(id) || String(s.id) === String(id));
       if (shelter) shelter.status = 'CLOSED';
@@ -1766,9 +1943,62 @@ app.post('/api/shelters/:id/close', requireRole('control', 'ngo', 'super_admin')
     if (!shelter) return res.status(404).json({ error: 'Shelter not found' });
 
     emitResourceClosed(id, { district: shelter.district, name: shelter.name });
+    await logAuditEvent({
+      actorId: user.id,
+      actorName: user.name,
+      actorRole: user.role,
+      action: 'SHELTER_CLOSED',
+      targetId: id,
+      targetType: 'Shelter',
+      jurisdiction: { state: shelter.state, district: shelter.district },
+      details: { name: shelter.name }
+    });
     res.json({ message: 'Shelter closed successfully', shelter });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/shelters/:id/restore', requireRole('control', 'ngo', 'super_admin'), requireVerified, async (req, res) => {
+  const { id } = req.params;
+  const user = req.user;
+  try {
+    let shelter = null;
+    if (isDbMode()) {
+      if (!mongoose.isValidObjectId(id)) return res.status(400).json({ error: 'Invalid shelter ID.' });
+      shelter = await Shelter.findById(id);
+      if (!shelter) return res.status(404).json({ error: 'Shelter not found.' });
+      const managementCheck = canManageShelter(user, shelter);
+      if (!managementCheck.allowed) {
+        return res.status(403).json({ error: managementCheck.reason, code: 'GEO_AUTHORIZATION_DENIED' });
+      }
+      shelter.removedAt = null;
+      shelter.status = computeShelterStatus(shelter.capacity, shelter.currentOccupancy);
+      shelter.lastStatusAt = new Date();
+      await shelter.save();
+    } else if (process.env.NODE_ENV === 'test') {
+      shelter = (memoryStore.shelters || []).find((item) => String(item._id) === String(id) || String(item.id) === String(id));
+      if (shelter) {
+        shelter.removedAt = null;
+        shelter.status = computeShelterStatus(shelter.capacity, shelter.currentOccupancy || shelter.occupancy || 0);
+      }
+    }
+    if (!shelter) return res.status(404).json({ error: 'Shelter not found.' });
+    emitResourceUpdated(shelter);
+    await logAuditEvent({
+      actorId: user.id,
+      actorName: user.name,
+      actorRole: user.role,
+      action: 'SHELTER_RESTORED',
+      targetId: id,
+      targetType: 'Shelter',
+      jurisdiction: { state: shelter.state, district: shelter.district },
+      details: { name: shelter.name, status: shelter.status }
+    });
+    return res.json(shelter);
+  } catch (error) {
+    console.error('Shelter restoration failed:', error.message);
+    return res.status(500).json({ error: 'Unable to restore this shelter.' });
   }
 });
 
@@ -1839,11 +2069,20 @@ async function handleEmergencySOS(req, res, isRelay = false) {
     // 3. Extract and normalize location & metadata
     const lat = Number(payload.latitude !== undefined ? payload.latitude : (payload.lat !== undefined ? payload.lat : payload.location?.lat));
     const lng = Number(payload.longitude !== undefined ? payload.longitude : (payload.lng !== undefined ? payload.lng : payload.location?.lng));
-    const location = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : { lat: 30.3165, lng: 78.0322 };
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90
+      || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({
+        ok: false,
+        code: 'LOCATION_REQUIRED',
+        error: 'A valid incident location is required. Select a location or enable approximate district location.',
+        message: 'A valid incident location is required.'
+      });
+    }
+    const location = { lat, lng };
 
     const user = req.user ? await User.findById(req.user.id).catch(() => null) : null;
-    const district = payload.district || raw.district || user?.district || req.user?.district || 'Dehradun';
-    const state = payload.state || raw.state || user?.state || req.user?.state || 'Uttarakhand';
+    const district = payload.district || raw.district || user?.district || req.user?.district || 'Gautam Buddha Nagar';
+    const state = payload.state || raw.state || user?.state || req.user?.state || 'Uttar Pradesh';
     const village = payload.village || raw.village || user?.village || req.user?.village || 'Unknown';
     const incidentType = payload.incidentType || payload.type || 'Medical';
     const locationSource = payload.locationSource || (payload.isApproximateLocation ? 'DISTRICT_FALLBACK' : 'GPS_EXACT');
@@ -1899,6 +2138,15 @@ async function handleEmergencySOS(req, res, isRelay = false) {
       contactPhone: isRelay
         ? (payload.contactPhone || null)
         : (user?.phone || req.user?.phone || payload.contactPhone || '+919876543210')
+    };
+    const analysis = analyzeIncidentReport(sosObj);
+    sosObj.aiAssessment = {
+      level: analysis.explainablePriority.level,
+      score: analysis.explainablePriority.score,
+      explanation: analysis.explainablePriority.explanation,
+      urgentNeeds: analysis.urgentNeeds,
+      assessedAt: new Date(),
+      advisoryOnly: true
     };
 
     // 4. Smart Responder Proximity Matching & Load Balancing
@@ -2042,11 +2290,20 @@ async function handleSosLite(req, res) {
     // 3. Extract and normalize location & priority
     const lat = Number(unsigned.lat);
     const lng = Number(unsigned.lng);
-    const location = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : { lat: 30.3165, lng: 78.0322 };
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90
+      || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({
+        ok: false,
+        code: 'LOCATION_REQUIRED',
+        error: 'The emergency packet must contain a valid incident location.',
+        message: 'A valid incident location is required.'
+      });
+    }
+    const location = { lat, lng };
 
     const user = req.user ? await User.findById(req.user.id).catch(() => null) : null;
-    const district = raw.district || packet.district || user?.district || req.user?.district || 'Dehradun';
-    const state = raw.state || packet.state || user?.state || req.user?.state || 'Uttarakhand';
+    const district = raw.district || packet.district || user?.district || req.user?.district || 'Gautam Buddha Nagar';
+    const state = raw.state || packet.state || user?.state || req.user?.state || 'Uttar Pradesh';
     const village = raw.village || packet.village || user?.village || req.user?.village || 'Unknown';
     const incidentType = unsigned.incidentType || 'Medical';
     const locationSource = unsigned.locationSource || 'GPS_EXACT';
@@ -2100,6 +2357,15 @@ async function handleSosLite(req, res) {
       reportedBy,
       contactName: user?.name || req.user?.name || packet.contactName || 'Civic Reporter',
       contactPhone: user?.phone || req.user?.phone || packet.contactPhone || '+919876543210'
+    };
+    const analysis = analyzeIncidentReport(sosObj);
+    sosObj.aiAssessment = {
+      level: analysis.explainablePriority.level,
+      score: analysis.explainablePriority.score,
+      explanation: analysis.explainablePriority.explanation,
+      urgentNeeds: analysis.urgentNeeds,
+      assessedAt: new Date(),
+      advisoryOnly: true
     };
 
     // 4. Smart Responder Proximity Matching & Load Balancing
@@ -2409,11 +2675,35 @@ app.post('/api/sos/:id/triage', requireRole('control'), requireVerified, async (
     });
   }
 
+  const allowedPriorities = ['LOW', 'MEDIUM', 'MODERATE', 'HIGH', 'CRITICAL', 'SEVERE'];
+  const allowedCapabilities = [
+    'Medical', 'First Aid', 'Flood Rescue', 'Boat Rescue', 'Search & Rescue',
+    'Fire Response', 'Evacuation', 'Relief Distribution', 'Shelter Support', 'Transport'
+  ];
+  if (priority && !allowedPriorities.includes(String(priority).toUpperCase())) {
+    return res.status(400).json({ error: 'Select a supported incident priority.' });
+  }
+  if (Array.isArray(requiredCapabilities) && requiredCapabilities.some((value) => !allowedCapabilities.includes(value))) {
+    return res.status(400).json({ error: 'One or more required capabilities are invalid.' });
+  }
+  if (peopleAffected !== undefined && (!Number.isInteger(Number(peopleAffected)) || Number(peopleAffected) < 1 || Number(peopleAffected) > 100000)) {
+    return res.status(400).json({ error: 'People affected must be a whole number between 1 and 100000.' });
+  }
+  if (triageNotes !== undefined && (typeof triageNotes !== 'string' || triageNotes.length > 2000)) {
+    return res.status(400).json({ error: 'Triage notes must be 2000 characters or fewer.' });
+  }
+
   // Update triage attributes
+  const previousValues = {
+    priority: sos.priority,
+    requiredCapabilities: [...(sos.requiredCapabilities || [])],
+    peopleAffected: sos.peopleAffected,
+    triageNotes: sos.triageNotes || null
+  };
   if (priority) sos.priority = priority;
   if (Array.isArray(requiredCapabilities)) sos.requiredCapabilities = requiredCapabilities;
-  if (peopleAffected !== undefined) sos.peopleAffected = Number(peopleAffected) || 1;
-  if (triageNotes) sos.triageNotes = triageNotes;
+  if (peopleAffected !== undefined) sos.peopleAffected = Number(peopleAffected);
+  if (triageNotes !== undefined) sos.triageNotes = triageNotes.trim();
   sos.triagedBy = { id: req.user.id, name: req.user.name, role: req.user.role };
   sos.triagedAt = new Date();
   sos.isTriageComplete = true;
@@ -2431,10 +2721,13 @@ app.post('/api/sos/:id/triage', requireRole('control'), requireVerified, async (
     targetType: 'SOS',
     jurisdiction: { state: sos.state, district: sos.district, village: sos.village },
     details: {
+      previousValues,
+      changedValues: {
       priority: sos.priority,
       requiredCapabilities: sos.requiredCapabilities,
       peopleAffected: sos.peopleAffected,
       triageNotes: sos.triageNotes
+      }
     }
   });
 
@@ -2755,8 +3048,39 @@ app.post('/api/evacuation', requireRole('villager'), async (req, res) => {
     }
 
     let shelter = null;
-    if (counts.inShelter > 0 && req.body.shelterId && mongoose.isValidObjectId(req.body.shelterId)) {
-      shelter = await Shelter.findById(req.body.shelterId);
+    if (counts.inShelter > 0) {
+      if (!req.body.shelterId || !mongoose.isValidObjectId(req.body.shelterId)) {
+        return res.status(400).json({ error: 'Select a valid registered shelter for family members reported in a shelter.' });
+      }
+      shelter = await Shelter.findOne({
+        _id: req.body.shelterId,
+        status: 'ACTIVE',
+        verified: { $ne: false },
+        removedAt: null
+      });
+      if (!shelter) {
+        return res.status(409).json({ error: 'That shelter is not currently open and eligible for evacuation reports.' });
+      }
+      const previousReport = await EvacuationReport.findOne({ user: user._id });
+      const otherReports = await EvacuationReport.aggregate([
+        { $match: { shelter: shelter._id, user: { $ne: user._id } } },
+        { $group: { _id: null, people: { $sum: '$inShelter' } } }
+      ]);
+      const alreadyReported = Number(otherReports[0]?.people || 0);
+      const liveOccupancy = Number(shelter.currentOccupancy || shelter.occupancy || 0);
+      if (liveOccupancy + alreadyReported + counts.inShelter > shelter.capacity) {
+        return res.status(409).json({
+          error: 'There is not enough verified capacity at this shelter for the reported family members.',
+          availableSpaces: Math.max(0, shelter.capacity - liveOccupancy - alreadyReported)
+        });
+      }
+      if (previousReport?.shelter && String(previousReport.shelter) !== String(shelter._id)) {
+        previousReport.needsReview = true;
+        previousReport.reviewReason = 'Family shelter destination changed; confirm previous shelter occupancy.';
+        await previousReport.save();
+      }
+    } else if (req.body.shelterId) {
+      return res.status(400).json({ error: 'Shelter destination can only be set when at least one person is reported in a shelter.' });
     }
 
     const report = await EvacuationReport.findOneAndUpdate(
@@ -2771,7 +3095,9 @@ app.post('/api/evacuation', requireRole('villager'), async (req, res) => {
         totalMembers,
         ...counts,
         shelter: shelter ? shelter._id : null,
-        shelterName: shelter ? shelter.name : null
+        shelterName: shelter ? shelter.name : null,
+        needsReview: false,
+        reviewReason: null
       },
       { upsert: true, new: true, runValidators: true }
     );
@@ -2855,15 +3181,51 @@ app.get('/api/ngos', async (req, res) => {
   }
 });
 
+app.get('/api/ngos/me', requireRole('ngo'), requireVerified, async (req, res) => {
+  try {
+    let ngo = null;
+    if (isDbMode()) {
+      if (req.user.ngo && mongoose.isValidObjectId(req.user.ngo)) {
+        ngo = await NGO.findById(req.user.ngo).select('status').lean();
+      }
+      if (!ngo) ngo = await NGO.findOne({ phone: req.user.phone }).select('status').lean();
+    } else if (process.env.NODE_ENV === 'test') {
+      ngo = memoryStore.ngos.find((candidate) =>
+        String(candidate._id) === String(req.user.ngo)
+        || candidate.phone === req.user.phone
+      ) || null;
+    } else {
+      return res.status(503).json({ error: 'Responder status is unavailable while the database is disconnected.' });
+    }
+    if (!ngo) return res.status(404).json({ error: 'No responder organization is linked to this account.' });
+    return res.json({ status: ngo.status || 'Offline' });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Update NGO location / status (logged in NGO) & broadcast live movement
 app.patch('/api/ngos/location', requireRole('ngo'), requireVerified, async (req, res) => {
   const { lat, lng, state, district, status, resourceType, activeSosId } = req.body;
   if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
     return res.status(400).json({ error: 'Please provide valid lat and lng coordinates' });
   }
+  if (Number(lat) < 6.5 || Number(lat) > 37.6 || Number(lng) < 68 || Number(lng) > 97.5) {
+    return res.status(400).json({ error: 'Responder coordinates must be within India.' });
+  }
 
   const numLat = Number(lat);
   const numLng = Number(lng);
+  if (status !== undefined && !['Available', 'Busy', 'Offline'].includes(status)) {
+    return res.status(400).json({ error: 'Status must be Available, Busy, or Offline.' });
+  }
+  const jurisdiction = verifyJurisdiction(req.user, {
+    state: state || req.user.state,
+    district: district || req.user.district
+  });
+  if (!jurisdiction.allowed) {
+    return res.status(403).json({ error: jurisdiction.reason, code: 'GEO_AUTHORIZATION_DENIED' });
+  }
 
   try {
     const ngoId = req.user?.ngo;
@@ -2897,7 +3259,7 @@ app.patch('/api/ngos/location', requireRole('ngo'), requireVerified, async (req,
         }
         await item.save();
       }
-    } else {
+    } else if (process.env.NODE_ENV === 'test') {
       // Demo store fallback
       updatedResponder = {
         _id: ngoId || `ngo-demo-${Date.now()}`,
@@ -2923,6 +3285,8 @@ app.patch('/api/ngos/location', requireRole('ngo'), requireVerified, async (req,
           }
         }
       });
+    } else {
+      return res.status(503).json({ error: 'Responder location is unavailable while the database is disconnected.' });
     }
 
     // Broadcast live responder movement via Socket.IO to Panchayat & Villagers
@@ -3783,11 +4147,18 @@ app.post('/api/admin/users/:id/reset-password', requireRole('super_admin'), asyn
 
 // Audit logs endpoint (Super admin endpoint & legacy alias)
 async function handleQueryAuditLogs(req, res) {
+  if (req.user.role !== 'control') {
+    return res.status(403).json({ error: 'Audit logs are only available to authorized Authorities.' });
+  }
+  if (!req.user.district || !req.user.state) {
+    return res.status(403).json({ error: 'A verified Authority jurisdiction is required to view audit logs.' });
+  }
+
   try {
     const logs = await queryAuditLogs({
       action: req.query.action,
-      district: req.user.role === 'control' && req.user.district ? req.user.district : req.query.district,
-      state: req.query.state,
+      district: req.user.district,
+      state: req.user.state,
       limit: req.query.limit || 50
     });
     res.json(logs);
@@ -3796,8 +4167,8 @@ async function handleQueryAuditLogs(req, res) {
   }
 }
 
-app.get('/api/admin/audit', requireRole('super_admin'), handleQueryAuditLogs);
-app.get('/api/admin/audit-logs', requireRole('super_admin', 'control'), handleQueryAuditLogs);
+app.get('/api/admin/audit', requireRole('control'), requireVerified, handleQueryAuditLogs);
+app.get('/api/admin/audit-logs', requireRole('control'), requireVerified, handleQueryAuditLogs);
 
 // List alerts, newest first
 //   /api/alerts                              -> latest alerts

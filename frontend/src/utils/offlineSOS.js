@@ -2,6 +2,8 @@ import { API_URL, getToken } from '../api.js';
 import { getOrCreateDeviceId, signEmergencyPayload, registerDeviceWithBackend } from './trustedDevice.js';
 import { transportManager } from './mesh/EmergencyTransport.js';
 import { getSocket } from './socketClient.js';
+import { DEFAULT_STATE, DEFAULT_DISTRICT } from '../config/locationConfig.js';
+import { findDistrictCoordinates } from '../data/indiaLocations.js';
 import {
   buildSosLitePayload,
   computeLitePriority
@@ -165,15 +167,19 @@ export function getLocationWithSmartFallback(options = {}) {
         return;
       }
 
-      // Default safe coordinate if nothing is known (Dehradun centre)
-      resolve({
-        latitude: 30.3165,
-        longitude: 78.0322,
-        accuracy: 10000,
-        locationSource: 'DISTRICT_FALLBACK',
-        isApproximateLocation: true,
-        label: 'Default District Center'
-      });
+      const defaultDistrictCoordinates = findDistrictCoordinates(DEFAULT_DISTRICT, DEFAULT_STATE);
+      if (defaultDistrictCoordinates) {
+        resolve({
+          latitude: defaultDistrictCoordinates.lat,
+          longitude: defaultDistrictCoordinates.lng,
+          accuracy: 10000,
+          locationSource: 'DISTRICT_FALLBACK',
+          isApproximateLocation: true,
+          label: `Approximate District Center (${DEFAULT_DISTRICT})`
+        });
+        return;
+      }
+      resolve(null);
     };
 
     if (!navigator.geolocation) {
@@ -523,8 +529,8 @@ export async function queueAndSendEmergencySOS(sosData) {
     contactPhone: sosData.contactPhone || null,
     photos: sosData.photos || [],
     village: sosData.village || '',
-    district: sosData.district || 'Dehradun',
-    state: sosData.state || 'Uttarakhand',
+    district: sosData.district || DEFAULT_DISTRICT,
+    state: sosData.state || DEFAULT_STATE,
     extraNotes: sosData.extraNotes || ''
   };
 
@@ -543,8 +549,8 @@ export async function queueAndSendEmergencySOS(sosData) {
     payload: unsignedLite,
     signature,
     seenIncidentIds: [clientIncidentId],
-    district: sosData.district || 'Dehradun',
-    state: sosData.state || 'Uttarakhand',
+    district: sosData.district || DEFAULT_DISTRICT,
+    state: sosData.state || DEFAULT_STATE,
     village: sosData.village || ''
   };
 
@@ -1009,8 +1015,8 @@ export async function resendAsNewReport(oldIncidentId) {
     contactPhone: oldRecord.contactPhone || null,
     photos: oldRecord.photos || [],
     village: oldRecord.village || '',
-    district: oldRecord.district || 'Dehradun',
-    state: oldRecord.state || 'Uttarakhand',
+    district: oldRecord.district || DEFAULT_DISTRICT,
+    state: oldRecord.state || DEFAULT_STATE,
     extraNotes: oldRecord.extraNotes || ''
   };
   detailsPayload.clientIncidentId = newIncidentId;

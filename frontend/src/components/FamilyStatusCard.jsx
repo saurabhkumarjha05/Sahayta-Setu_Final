@@ -32,7 +32,7 @@ function Stepper({ value, onChange, min = 0, max = 100 }) {
   );
 }
 
-// Villagers tell the Gram Panchayat where each member of their family went after an alert.
+// Villagers tell their local Authority where each member of their family went after an alert.
 function FamilyStatusCard({ shelters }) {
   const [form, setForm] = useState(EMPTY);
   const [lastSaved, setLastSaved] = useState(null);
@@ -81,7 +81,7 @@ function FamilyStatusCard({ shelters }) {
         body: JSON.stringify(form),
       });
       setLastSaved(report.updatedAt);
-      setMessage("Saved. Your Gram Panchayat can now see where your family is.");
+      setMessage("Saved. Your local Authority can now see where your family is.");
     } catch (err) {
       setError(err.status ? err.message : "Cannot reach the server. Please try again.");
     } finally {
@@ -94,7 +94,7 @@ function FamilyStatusCard({ shelters }) {
       <div className="villager-panel-heading">
         <div>
           <h3>Where is your family?</h3>
-          <p>Tell your Gram Panchayat where everyone went, so no one is left behind.</p>
+          <p>Tell your local Authority where everyone went, so no one is left behind.</p>
         </div>
         {lastSaved && (
           <span className="family-updated">
@@ -140,10 +140,17 @@ function FamilyStatusCard({ shelters }) {
             {shelters.map((shelter) => (
               <option key={shelter._id} value={shelter._id}>
                 {shelter.name}
+                {Number.isFinite(Number(shelter.distance)) ? ` · ${shelter.distance.toFixed(1)} km` : ''}
+                {Number.isFinite(Number(shelter.availableSpaces)) ? ` · ${shelter.availableSpaces} spaces` : ''}
               </option>
             ))}
           </select>
         </div>
+      )}
+      {form.inShelter > 0 && shelters.length === 0 && (
+        <p role="status" className="family-error">
+          No verified open shelter with available capacity was found nearby. Contact your local Authority before traveling to a shelter.
+        </p>
       )}
 
       <div className={`family-summary ${notAccounted < 0 ? "over" : notAccounted > 0 ? "missing" : "ok"}`}>

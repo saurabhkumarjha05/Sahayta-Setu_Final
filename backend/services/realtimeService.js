@@ -7,14 +7,17 @@ let sosLiteSocketHandler = null;
 const pushSubscriptions = new Map(); // endpoint -> { subscription, district, state, userId, role }
 
 // Setup VAPID keys for Web Push
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'UUxI4O84qWn5s65n6N_W8vjZ9_V5t5R3N_V_Q8P_n_s';
-const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:alerts@sahaytasetu.gov.in';
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_EMAIL = process.env.VAPID_EMAIL || '';
 
 try {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY || !VAPID_EMAIL) {
+    throw new Error('VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_EMAIL are required for web push.');
+  }
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 } catch (err) {
-  console.warn('VAPID setup notice:', err.message);
+  console.warn('Web Push is disabled:', err.message);
 }
 
 /**

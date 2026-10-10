@@ -4,9 +4,9 @@ import ProfileMenu from "./components/ProfileMenu";
 import LocationModal from "./components/LocationModal";
 import LocationSelector from "./components/LocationSelector";
 import { apiFetch, initials } from "./api";
-import { getVerifiedShelters, calculateDistanceKm } from "./data/verifiedResources";
-import { findDistrictCoordinates } from "./data/indiaLocations";
+import { calculateDistanceKm } from "./data/verifiedResources";
 import { getSocket, subscribeToDistrict } from "./utils/socketClient";
+import { DEFAULT_STATE, DEFAULT_DISTRICT } from "./config/locationConfig";
 
 // The id of the NGO an SOS is assigned to (populated object or plain id)
 const assignedId = (sos) => sos.assignedTo?._id || sos.assignedTo || null;
@@ -22,16 +22,45 @@ function NgoDashboard({ user, onLogout }) {
   const [locationSOS, setLocationSOS] = useState(null);
 
   // NGO Location State
-  const [selectedState, setSelectedState] = useState(user?.state || "Uttarakhand");
-  const [selectedDistrict, setSelectedDistrict] = useState(user?.district || "Dehradun");
-  const [ngoStatus, setNgoStatus] = useState("Available");
-  const [ngoCoords, setNgoCoords] = useState(() => {
-    const found = findDistrictCoordinates(user?.district || "Dehradun", user?.state || "Uttarakhand");
-    return found ? { lat: found.lat, lng: found.lng } : { lat: 30.3165, lng: 78.0322 };
-  });
+  const [selectedState, setSelectedState] = useState(user?.state || DEFAULT_STATE);
+  const [selectedDistrict, setSelectedDistrict] = useState(user?.district || DEFAULT_DISTRICT);
+  const [ngoStatus, setNgoStatus] = useState("Unknown");
+  const [ngoCoords, setNgoCoords] = useState(null);
+  const [verifiedSheltersCount, setVerifiedSheltersCount] = useState(null);
   const [locationUpdateStatus, setLocationUpdateStatus] = useState("");
 
   const myNgoId = user?.ngo || null;
+
+  useEffect(() => {
+    let active = true;
+    apiFetch('/api/ngos/me')
+      .then((data) => {
+        if (active && ['Available', 'Busy', 'Offline'].includes(data.status)) setNgoStatus(data.status);
+      })
+      .catch((error) => {
+        console.warn("Could not load responder status:", error.message);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch(`/api/shelters?state=${encodeURIComponent(selectedState)}&district=${encodeURIComponent(selectedDistrict)}`)
+      .then((data) => {
+        if (!active) return;
+        const eligible = (Array.isArray(data) ? data : []).filter((shelter) =>
+          shelter.status === 'ACTIVE'
+          && shelter.verified !== false
+          && Number(shelter.availableSpaces) > 0
+        );
+        setVerifiedSheltersCount(eligible.length);
+      })
+      .catch((error) => {
+        console.warn("Could not load verified shelter count:", error.message);
+        if (active) setVerifiedSheltersCount(null);
+      });
+    return () => { active = false; };
+  }, [selectedState, selectedDistrict]);
 
   // All SOS requests refreshed every 4 seconds (real-time stream)
   const fetchSOS = useCallback(async () => {
@@ -90,16 +119,19 @@ function NgoDashboard({ user, onLogout }) {
   const handleLocationChange = ({ state, district, coordinates }) => {
     setSelectedState(state);
     setSelectedDistrict(district);
-    if (coordinates && Number.isFinite(coordinates.lat) && Number.isFinite(coordinates.lng)) {
-      setNgoCoords({ lat: coordinates.lat, lng: coordinates.lng });
-    }
+    setNgoCoords(null);
+    if (!coordinates) setLocationUpdateStatus("No verified map center is available for that district.");
+    else setLocationUpdateStatus("Region updated. Share your current GPS location before publishing your operational position.");
   };
 
   // Status Change Handler (Available / Busy / Offline)
   const handleStatusChange = async (newStatus) => {
-    setNgoStatus(newStatus);
+    if (!ngoCoords) {
+      setLocationUpdateStatus("Share your current GPS location before updating operational status.");
+      return;
+    }
     try {
-      await apiFetch('/api/ngos/location', {
+      const response = await apiFetch('/api/ngos/location', {
         method: 'PATCH',
         body: JSON.stringify({
           lat: ngoCoords.lat,
@@ -109,11 +141,11 @@ function NgoDashboard({ user, onLogout }) {
           status: newStatus
         })
       });
+      setNgoStatus(response.status);
       setLocationUpdateStatus(`✓ Availability status updated to: ${newStatus.toUpperCase()}`);
       setTimeout(() => setLocationUpdateStatus(""), 3000);
-    } catch {
-      setLocationUpdateStatus(`✓ Set status locally to ${newStatus}`);
-      setTimeout(() => setLocationUpdateStatus(""), 3000);
+    } catch (error) {
+      setLocationUpdateStatus(`Status update failed: ${error.message}`);
     }
   };
 
@@ -128,27 +160,28 @@ function NgoDashboard({ user, onLogout }) {
       async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        setNgoCoords({ lat, lng });
         try {
-          await apiFetch('/api/ngos/location', {
+          const response = await apiFetch('/api/ngos/location', {
             method: 'PATCH',
             body: JSON.stringify({
               lat,
               lng,
               state: selectedState,
               district: selectedDistrict,
-              status: ngoStatus
+              status: ['Available', 'Busy', 'Offline'].includes(ngoStatus) ? ngoStatus : undefined
             })
           });
+          setNgoCoords({ lat, lng });
+          if (['Available', 'Busy', 'Offline'].includes(response.status)) setNgoStatus(response.status);
           setLocationUpdateStatus(`✓ Operational location updated to GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-        } catch {
-          setLocationUpdateStatus(`✓ Position set locally to GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+        } catch (error) {
+          setLocationUpdateStatus(`Could not publish GPS location: ${error.message}`);
         }
         setTimeout(() => setLocationUpdateStatus(""), 5000);
       },
       (err) => {
         console.warn("GPS error:", err);
-        setLocationUpdateStatus("⚠️ GPS permission denied. Using selected district center.");
+        setLocationUpdateStatus(`Could not determine current GPS position: ${err.message}. No simulated location was shared.`);
         setTimeout(() => setLocationUpdateStatus(""), 4000);
       }
     );
@@ -162,52 +195,12 @@ function NgoDashboard({ user, onLogout }) {
   const visible = [...mine, ...pending];
 
   // Stats calculation
-  const verifiedSheltersCount = getVerifiedShelters(selectedState, selectedDistrict).length;
-  const availableUnitsCount = ngoStatus === "Available" ? 1 : 0;
-
   const currentRequest = visible.find((sos) => sos._id === selectedId) || visible[0];
   const otherRequests = visible.filter((sos) => sos !== currentRequest).slice(0, 4);
   const isMine = currentRequest && assignedId(currentRequest) === myNgoId;
 
-  // Live Responder Movement Simulator Beacon when mission is in progress
-  useEffect(() => {
-    if (!mine || mine.length === 0) return;
-    const activeSos = mine[0];
-    if (!activeSos || !activeSos.location || !Number.isFinite(activeSos.location.lat)) return;
-
-    const beaconInterval = setInterval(async () => {
-      // Step responder slightly closer to the incident
-      setNgoCoords((prev) => {
-        const step = 0.001; // ~100m step towards incident
-        const dLat = activeSos.location.lat - prev.lat;
-        const dLng = activeSos.location.lng - prev.lng;
-        const dist = Math.sqrt(dLat * dLat + dLng * dLng);
-        if (dist < 0.001) return prev; // Arrived at scene
-
-        const newLat = prev.lat + (dLat / dist) * step;
-        const newLng = prev.lng + (dLng / dist) * step;
-
-        apiFetch('/api/ngos/location', {
-          method: 'PATCH',
-          body: JSON.stringify({
-            lat: newLat,
-            lng: newLng,
-            state: selectedState,
-            district: selectedDistrict,
-            status: 'Busy',
-            activeSosId: activeSos._id
-          })
-        }).catch(() => {});
-
-        return { lat: newLat, lng: newLng };
-      });
-    }, 5000);
-
-    return () => clearInterval(beaconInterval);
-  }, [mine, selectedState, selectedDistrict]);
-
   // Compute distance from NGO to current request
-  const currentReqDistance = currentRequest && currentRequest.location?.lat
+  const currentReqDistance = ngoCoords && currentRequest && currentRequest.location?.lat
     ? calculateDistanceKm([ngoCoords.lat, ngoCoords.lng], [currentRequest.location.lat, currentRequest.location.lng])
     : null;
 
@@ -343,6 +336,8 @@ function NgoDashboard({ user, onLogout }) {
           <select
             value={ngoStatus}
             onChange={(e) => handleStatusChange(e.target.value)}
+            disabled={!ngoCoords}
+            title={ngoCoords ? "Update organization operational status" : "Share your current GPS position first"}
             style={{
               backgroundColor: ngoStatus === 'Available' ? '#166534' : '#9a3412',
               color: '#ffffff',
@@ -354,6 +349,7 @@ function NgoDashboard({ user, onLogout }) {
               cursor: 'pointer'
             }}
           >
+            <option value="Unknown" disabled>● STATUS NOT SET</option>
             <option value="Available">● AVAILABLE</option>
             <option value="Busy">● BUSY</option>
             <option value="Offline">● OFFLINE</option>
@@ -408,15 +404,15 @@ function NgoDashboard({ user, onLogout }) {
             <span style={{ fontSize: '1.5rem' }}>🏠</span>
             <div>
               <small>NEARBY SHELTERS</small>
-              <strong>{String(verifiedSheltersCount).padStart(2, "0")}</strong>
+              <strong>{verifiedSheltersCount === null ? "--" : String(verifiedSheltersCount).padStart(2, "0")}</strong>
             </div>
           </div>
 
           <div className="ngo-stat-card">
             <span style={{ fontSize: '1.5rem' }}>🚑</span>
             <div>
-              <small>AVAILABLE UNITS</small>
-              <strong>{String(availableUnitsCount).padStart(2, "0")}</strong>
+              <small>ORGANIZATION STATUS</small>
+              <strong>{ngoStatus.toUpperCase()}</strong>
             </div>
           </div>
 
@@ -446,7 +442,7 @@ function NgoDashboard({ user, onLogout }) {
 
           {!myNgoId && (
             <div className="ngo-banner ngo-banner-error">
-              Demo mode / Logged in responder: Ready to dispatch and accept emergency incidents.
+              Your account is not linked to a responder organization. Contact an administrator to complete verification.
             </div>
           )}
 

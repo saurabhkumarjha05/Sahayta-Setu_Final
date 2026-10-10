@@ -19,8 +19,12 @@ import { getSocket } from '../../utils/socketClient';
 import { apiFetch } from '../../api';
 import { useI18n } from '../../i18n';
 import { Button, Badge, Card, BottomSheet } from '../ui';
+import { DEFAULT_STATE, DEFAULT_DISTRICT } from '../../config/locationConfig';
+import { findDistrictCoordinates } from '../../data/indiaLocations';
 
 const IDB_RESOURCE_KEY = 'sahayta_cached_nearby_resources';
+const DEFAULT_LOCATION = findDistrictCoordinates(DEFAULT_DISTRICT, DEFAULT_STATE);
+const DEFAULT_MAP_CENTER = DEFAULT_LOCATION ? [DEFAULT_LOCATION.lat, DEFAULT_LOCATION.lng] : [28.5355, 77.391];
 
 function AutoBounds({ points }) {
   const map = useMap();
@@ -38,12 +42,12 @@ function AutoBounds({ points }) {
 }
 
 export function NearbyResourcesMap({
-  userPos = [30.3165, 78.0322],
+  userPos = DEFAULT_MAP_CENTER,
   isLiveGps = false,
   locationAccuracy = 50,
   locationSource = 'District Fallback',
-  state = 'Uttarakhand',
-  district = 'Dehradun',
+  state = DEFAULT_STATE,
+  district = DEFAULT_DISTRICT,
   onLocateMe,
   hasActiveSos = false,
   sosCoords = null
@@ -91,7 +95,7 @@ export function NearbyResourcesMap({
         }
       }
     } catch (err) {
-      console.warn('Live resource fetch failed, loading cached fallback:', err.message);
+      console.warn('Live resource fetch failed; cached resource data may be stale:', err.message);
       setNetworkStatus('offline');
 
       // Attempt to load from offline cache
@@ -99,9 +103,13 @@ export function NearbyResourcesMap({
         const cached = localStorage.getItem(IDB_RESOURCE_KEY);
         if (cached) {
           const parsed = JSON.parse(cached);
-          setResources(parsed.resources || []);
+          setResources((parsed.resources || []).filter((resource) => resource.availableSpaces > 0
+            && resource.status !== 'CLOSED' && resource.status !== 'FULL'));
           setVolunteerSummary(parsed.volunteerSummary || null);
           setLastUpdated(new Date(parsed.timestamp));
+        } else {
+          setResources([]);
+          setVolunteerSummary(null);
         }
       } catch {
         // ignore
@@ -197,11 +205,12 @@ export function NearbyResourcesMap({
   };
 
   const handleConfirmPanchayatRequest = () => {
-    setPanchayatNotice('✓ Help request routed to Gram Panchayat & District Control Centre. Human dispatch coordinator alerted.');
-    setTimeout(() => {
-      setPanchayatModalOpen(false);
-      setPanchayatNotice('');
-    }, 2500);
+    if (!selectedResource || !Number.isFinite(Number(selectedResource.lat)) || !Number.isFinite(Number(selectedResource.lng))) {
+      setPanchayatNotice('Directions are unavailable because this facility has no verified coordinates.');
+      return;
+    }
+    const destination = `${selectedResource.lat},${selectedResource.lng}`;
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -297,7 +306,7 @@ export function NearbyResourcesMap({
                 {volunteerSummary.count} verified volunteers available within {volunteerSummary.radiusKm} km
               </strong>
               <small style={{ display: 'block', opacity: 0.9 }}>
-                🔒 Privacy-Protected: Exact coordinates masked. Dispatch is coordinated exclusively via Gram Panchayat Control Centre.
+                🔒 Privacy-Protected: Exact coordinates masked. Dispatch is coordinated exclusively via the local Authority.
               </small>
             </div>
           </div>
@@ -503,7 +512,7 @@ export function NearbyResourcesMap({
                         className="action-btn action-panchayat"
                         onClick={() => handleRequestHelpViaPanchayat(res)}
                       >
-                        🏢 {t('resources.requestViaPanchayat')}
+                        🧭 {t('resources.requestViaPanchayat')}
                       </button>
                     </div>
                   </Card>
@@ -514,15 +523,15 @@ export function NearbyResourcesMap({
         </div>
       </div>
 
-      {/* REQUEST HELP VIA PANCHAYAT MODAL */}
+      {/* DIRECTIONS TO A VERIFIED RESOURCE */}
       <BottomSheet
         isOpen={panchayatModalOpen}
         onClose={() => setPanchayatModalOpen(false)}
-        title="Request Help via Gram Panchayat"
+        title="Contact or navigate to this resource"
       >
         <div style={{ padding: '8px 0' }}>
           <p style={{ margin: '0 0 12px 0', fontSize: '0.95rem' }}>
-            Routing request to <strong>Gram Panchayat Control Centre ({district})</strong> for:
+            This registered resource is <strong>{selectedResource?.distanceKm} km</strong> from your current location:
           </p>
           <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
             <strong>{selectedResource?.name}</strong>
@@ -532,7 +541,7 @@ export function NearbyResourcesMap({
           </div>
 
           <p style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '16px' }}>
-            ℹ️ Notice: Dispatch stays human-controlled. The Gram Panchayat officer reviews availability before assigning volunteer teams or shelter spots.
+            ℹ️ This opens directions only; it does not dispatch a responder or issue an evacuation order. For urgent rescue, submit an SOS so an authorized coordinator can review it.
           </p>
 
           {panchayatNotice ? (
@@ -545,7 +554,7 @@ export function NearbyResourcesMap({
                 Cancel
               </Button>
               <Button variant="primary" onClick={handleConfirmPanchayatRequest}>
-                Confirm Request
+                Open directions
               </Button>
             </div>
           )}

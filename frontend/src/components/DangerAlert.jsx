@@ -88,8 +88,8 @@ async function showPhoneNotification(alert) {
     tag: `alert-${alert._id}`,
     requireInteraction: true,
     vibrate: [500, 200, 500, 200, 500],
-    icon: "/favicon.svg",
-    badge: "/favicon.svg"
+    icon: "/logo_hackathon.jpeg",
+    badge: "/logo_hackathon.jpeg"
   };
 
   try {

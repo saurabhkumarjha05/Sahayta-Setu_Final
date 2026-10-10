@@ -6,7 +6,7 @@ import { DEFAULT_STATE } from "../config/locationConfig";
 import "./AdminDashboard.css";
 
 export default function AdminDashboard({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "organizations" | "citizens" | "shelters" | "audit" | "account"
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "organizations" | "citizens" | "shelters" | "account"
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [liveConnected, setLiveConnected] = useState(false);
 
@@ -52,12 +52,8 @@ export default function AdminDashboard({ user, onLogout }) {
   const [newShelterDistrict, setNewShelterDistrict] = useState("");
   const [newShelterCapacity, setNewShelterCapacity] = useState(100);
   const [newShelterContact, setNewShelterContact] = useState("");
-  const [newShelterLat, setNewShelterLat] = useState("30.3165");
-  const [newShelterLng, setNewShelterLng] = useState("78.0322");
-
-  // Audit Logs
-  const [auditLogs, setAuditLogs] = useState([]);
-  const [auditLoading, setAuditLoading] = useState(false);
+  const [newShelterLat, setNewShelterLat] = useState("");
+  const [newShelterLng, setNewShelterLng] = useState("");
 
   // Top banner toast ref
   const toastTimeoutRef = useRef(null);
@@ -134,19 +130,6 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   }, []);
 
-  // Fetch audit logs
-  const fetchAuditLogs = useCallback(async () => {
-    try {
-      setAuditLoading(true);
-      const data = await apiFetch("/api/audit-logs");
-      setAuditLogs(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Failed to load audit logs:", err);
-    } finally {
-      setAuditLoading(false);
-    }
-  }, []);
-
   // Initial load & Socket setup
   useEffect(() => {
     const initialLoad = setTimeout(() => {
@@ -217,21 +200,19 @@ export default function AdminDashboard({ user, onLogout }) {
       if (activeTab === "organizations") fetchEntities();
       if (activeTab === "citizens") fetchCitizens();
       if (activeTab === "shelters") fetchShelters();
-      if (activeTab === "audit") fetchAuditLogs();
     }, 30000);
     return () => clearInterval(interval);
-  }, [activeTab, fetchStats, fetchEntities, fetchCitizens, fetchShelters, fetchAuditLogs]);
+  }, [activeTab, fetchStats, fetchEntities, fetchCitizens, fetchShelters]);
 
   // Trigger tab data fetch
   useEffect(() => {
     const tabFetch = setTimeout(() => {
       if (activeTab === "citizens") fetchCitizens();
       if (activeTab === "shelters") fetchShelters();
-      if (activeTab === "audit") fetchAuditLogs();
       if (activeTab === "organizations") fetchEntities();
     }, 0);
     return () => clearTimeout(tabFetch);
-  }, [activeTab, fetchCitizens, fetchShelters, fetchAuditLogs, fetchEntities]);
+  }, [activeTab, fetchCitizens, fetchShelters, fetchEntities]);
 
   // Entity Actions
   const handleApprove = async (entityId) => {
@@ -361,6 +342,11 @@ export default function AdminDashboard({ user, onLogout }) {
       alert("Please select district");
       return;
     }
+    if (!Number.isFinite(Number(newShelterLat)) || Number(newShelterLat) < -90 || Number(newShelterLat) > 90
+      || !Number.isFinite(Number(newShelterLng)) || Number(newShelterLng) < -180 || Number(newShelterLng) > 180) {
+      alert("Enter valid facility coordinates. Do not use an approximate or default location.");
+      return;
+    }
     setActionLoading(true);
     try {
       await apiFetch("/api/shelters", {
@@ -371,11 +357,11 @@ export default function AdminDashboard({ user, onLogout }) {
           address: newShelterAddress.trim(),
           state: newShelterState,
           district: newShelterDistrict,
-          capacity: Number(newShelterCapacity) || 100,
+          capacity: Number(newShelterCapacity),
           publicContact: newShelterContact.trim(),
           location: {
-            lat: parseFloat(newShelterLat) || 30.3165,
-            lng: parseFloat(newShelterLng) || 78.0322,
+            lat: Number(newShelterLat),
+            lng: Number(newShelterLng),
           },
         }),
       });
@@ -423,8 +409,8 @@ export default function AdminDashboard({ user, onLogout }) {
         <div className="admin-sidebar-header">
           <div className="admin-brand">
             <img
-              src="/icon-192.svg"
-              alt="Sahayta Setu Shield Logo"
+              src="/logo_hackathon.jpeg"
+              alt="Sahayta Setu logo"
               className="admin-brand-logo"
             />
             <div>
@@ -500,20 +486,6 @@ export default function AdminDashboard({ user, onLogout }) {
             <div className="admin-nav-item-content">
               <span>🏠</span>
               <span>Shelters & Relief</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            className={`admin-nav-item ${activeTab === "audit" ? "active" : ""}`}
-            onClick={() => {
-              setActiveTab("audit");
-              setSidebarOpen(false);
-            }}
-          >
-            <div className="admin-nav-item-content">
-              <span>📜</span>
-              <span>Audit Trail</span>
             </div>
           </button>
 
@@ -638,7 +610,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   <div className="admin-stat-value">
                     {statsLoading ? "..." : stats.verifiedOrganizations}
                   </div>
-                  <div className="admin-stat-desc">Active Panchayats & NGOs</div>
+                  <div className="admin-stat-desc">Active Authorities & NGOs</div>
                 </div>
 
                 <div className="admin-stat-card">
@@ -705,7 +677,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <div>
                   <h1 className="admin-page-title">Organization & Responder Management</h1>
                   <p className="admin-page-subtitle">
-                    Authorize, reject, suspend, or reset credentials for Gram Panchayats, District Authorities, and NGOs.
+                    Authorize, reject, suspend, or reset credentials for Authorities and NGOs.
                   </p>
                 </div>
                 <button type="button" onClick={fetchEntities} className="admin-btn admin-btn-secondary">
@@ -737,7 +709,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   >
                     <option value="ALL">All Entity Types</option>
                     <option value="NGO">NGOs</option>
-                    <option value="PANCHAYAT">Gram Panchayats</option>
+                    <option value="PANCHAYAT">Authorities</option>
                     <option value="DISTRICT_AUTHORITY">District Authorities</option>
                   </select>
 
@@ -816,7 +788,7 @@ export default function AdminDashboard({ user, onLogout }) {
                           <td>
                             <div>{ent.district || "All Districts"}{ent.state ? `, ${ent.state}` : ""}</div>
                             {ent.panchayatId && (
-                              <small style={{ color: "#64748b" }}>GP: {ent.panchayatId}</small>
+                              <small style={{ color: "#64748b" }}>Authority ID: {ent.panchayatId}</small>
                             )}
                           </td>
                           <td>
@@ -1021,73 +993,6 @@ export default function AdminDashboard({ user, onLogout }) {
           )}
 
           {/* =================================================
-              TAB 5: AUDIT TRAIL
-          ================================================= */}
-          {activeTab === "audit" && (
-            <div>
-              <div className="admin-page-header">
-                <div>
-                  <h1 className="admin-page-title">Immutable Security & Operations Audit Trail</h1>
-                  <p className="admin-page-subtitle">
-                    Cryptographic and tamper-evident event log recording user registrations, administrator authorizations, and critical dispatches.
-                  </p>
-                </div>
-                <button type="button" onClick={fetchAuditLogs} className="admin-btn admin-btn-secondary">
-                  🔄 Refresh
-                </button>
-              </div>
-
-              <div className="admin-table-container">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Action</th>
-                      <th>Actor</th>
-                      <th>Target</th>
-                      <th>Jurisdiction</th>
-                      <th>Timestamp</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditLoading && (
-                      <tr>
-                        <td colSpan={5} style={{ textAlign: "center", padding: "32px", color: "#64748b" }}>
-                          ⏳ Loading audit logs...
-                        </td>
-                      </tr>
-                    )}
-                    {!auditLoading && auditLogs.length === 0 && (
-                      <tr>
-                        <td colSpan={5} style={{ textAlign: "center", padding: "32px", color: "#64748b" }}>
-                          No audit events recorded yet.
-                        </td>
-                      </tr>
-                    )}
-                    {!auditLoading && auditLogs.map((log) => (
-                      <tr key={log._id || log.timestamp}>
-                        <td>
-                          <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", background: "#f1f5f9", color: "#334155" }}>
-                            {log.action}
-                          </span>
-                        </td>
-                        <td>
-                          <strong>{log.actorName || log.actorId}</strong>
-                          <small style={{ display: "block", color: "#64748b" }}>Role: {log.actorRole}</small>
-                        </td>
-                        <td>
-                          {log.targetType} ({log.targetId || "—"})
-                        </td>
-                        <td>{log.jurisdiction?.district || "Global"}</td>
-                        <td>{new Date(log.timestamp).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* =================================================
               TAB 6: ADMIN PROFILE
           ================================================= */}
           {activeTab === "account" && (
@@ -1213,7 +1118,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     <span className="drawer-detail-value">{selectedEntity.blockCode || "—"}</span>
                   </div>
                   <div className="drawer-detail-item">
-                    <span className="drawer-detail-label">Panchayat ID</span>
+                    <span className="drawer-detail-label">Authority ID</span>
                     <span className="drawer-detail-value">{selectedEntity.panchayatId || "—"}</span>
                   </div>
                 </div>

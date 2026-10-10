@@ -5,6 +5,8 @@ import {
   queueAndSendEmergencySOS,
 } from "../utils/offlineSOS";
 import { useI18n } from "../i18n";
+import { DEFAULT_STATE, DEFAULT_DISTRICT } from "../config/locationConfig";
+import { findDistrictCoordinates } from "../data/indiaLocations";
 
 const EMERGENCY_TYPES = [
   { id: "Flood", icon: "🌊", key: "flood", fallback: "Flood / Waterlogging" },
@@ -42,16 +44,19 @@ function SOSModal({ user, onClose, onSent }) {
 
   const captureLocation = useCallback(async () => {
     setLocationState("loading");
+    const fallbackDistrict = user?.district || DEFAULT_DISTRICT;
+    const fallbackState = user?.state || DEFAULT_STATE;
+    const districtCoordinates = findDistrictCoordinates(fallbackDistrict, fallbackState);
     const result = await getLocationWithSmartFallback({
       districtFallback: {
-        district: user?.district || 'Dehradun',
-        lat: user?.lat || 30.3165,
-        lng: user?.lng || 78.0322
+        district: fallbackDistrict,
+        lat: user?.lat ?? districtCoordinates?.lat,
+        lng: user?.lng ?? districtCoordinates?.lng
       }
     });
     setLocation(result);
     setLocationState(result ? "ready" : "missing");
-  }, [user?.district, user?.lat, user?.lng]);
+  }, [user?.district, user?.state, user?.lat, user?.lng]);
 
   useEffect(() => {
     let active = true;
@@ -105,8 +110,8 @@ function SOSModal({ user, onClose, onSent }) {
         locationSource: location.locationSource,
         isApproximateLocation: location.isApproximateLocation,
         village: user?.village || "",
-        district: user?.district || "Dehradun",
-        state: user?.state || "Uttarakhand",
+        district: user?.district || DEFAULT_DISTRICT,
+        state: user?.state || DEFAULT_STATE,
         contactName: user?.name,
         contactPhone: user?.phone,
         userId: user?._id || user?.id || 'demo-villager',
@@ -257,7 +262,7 @@ function SOSModal({ user, onClose, onSent }) {
                       : t('sosModal.approxDistrict', { district: user?.district || 'Uttarakhand' })}
                   </strong>
                   <small>
-                    {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)} ({user?.district || 'Dehradun'})
+                    {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)} ({user?.district || 'KCC Institude ,Greater Noida'})
                   </small>
                 </>
               )}

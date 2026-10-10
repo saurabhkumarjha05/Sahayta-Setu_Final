@@ -10,6 +10,8 @@ const auditLogSchema = new mongoose.Schema(
       type: String,
       enum: [
         'ORG_REGISTERED',
+        'CITIZEN_LOGIN',
+        'CITIZEN_REGISTERED',
         'LOGIN_SUCCESS',
         'LOGIN_FAILED',
         'LOGIN_LOCKED',
@@ -34,12 +36,18 @@ const auditLogSchema = new mongoose.Schema(
         'SOS_CREATED',
         'SOS_TRIAGED',
         'SOS_ASSIGNED',
+        'SOS_DETAILS_UPDATED',
         'SOS_STATUS_UPDATED',
         'ALERT_CREATED',
         'ALERT_RETRANSMITTED',
         'ALERT_REVOKED',
         'DEVICE_REGISTERED',
-        'DEVICE_REVOKED'
+        'DEVICE_REVOKED',
+        'SHELTER_CREATED',
+        'SHELTER_UPDATED',
+        'SHELTER_CLOSED',
+        'SHELTER_RESTORED',
+        'SHELTER_REMOVED'
       ],
       required: true
     },

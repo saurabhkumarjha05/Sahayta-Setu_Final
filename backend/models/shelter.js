@@ -39,7 +39,8 @@ const shelterSchema = new mongoose.Schema(
     },
     organizationName: { type: String, default: null, trim: true },
     verified: { type: Boolean, default: true },
-    lastStatusAt: { type: Date, default: Date.now }
+    lastStatusAt: { type: Date, default: Date.now },
+    removedAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

@@ -7,7 +7,6 @@ import {
   EvacuationBar,
   EvacuationLegend,
   EvacuationView,
-  MapView,
   RespondersView,
   SheltersView,
   SOSView,
@@ -17,6 +16,7 @@ import {
 import VillagerDashboard from "./VillagerDashboard";
 import NgoDashboard from "./NgoDashboard";
 import AdminDashboard from "./components/AdminDashboard";
+import AuthorityAnalyticsDashboard from "./components/AuthorityAnalyticsDashboard";
 import StatusScreen from "./components/StatusScreen";
 import GramPanchayatMap from "./components/map/GramPanchayatMap";
 import "./App.css";
@@ -26,6 +26,7 @@ import { NearbyMeshControl } from "./components/ui/NearbyMeshControl";
 import { getSocket, subscribeToDistrict } from "./utils/socketClient";
 import { registerDeviceWithBackend } from "./utils/trustedDevice";
 import { registerPushNotifications } from "./utils/pushNotifications";
+import { DEFAULT_STATE, DEFAULT_DISTRICT } from "./config/locationConfig";
 
 // Value of the "Other village" choice in the alert form
 const OTHER_VILLAGE = "__other__";
@@ -49,7 +50,7 @@ function App() {
   const [ngosLoading, setNgosLoading] = useState(true);
   const [ngosError, setNgosError] = useState("");
 
-  // Which Control Centre page is open: dashboard | alerts | sos | map | shelters | responders
+  // Which Authority page is open: dashboard | analytics | alerts | sos | map | shelters | responders
   const [activeView, setActiveView] = useState("dashboard");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sosFilter, setSosFilter] = useState("active");
@@ -77,8 +78,8 @@ function App() {
   const [showAlertModal, setShowAlertModal] = useState(false);
 
   const [alertVillage, setAlertVillage] = useState("");   // "" = whole district
-  const [alertState, setAlertState] = useState("Karnataka");
-  const [alertDistrict, setAlertDistrict] = useState("Udupi");
+  const [alertState, setAlertState] = useState(DEFAULT_STATE);
+  const [alertDistrict, setAlertDistrict] = useState(DEFAULT_DISTRICT);
   const [otherVillage, setOtherVillage] = useState("");   // typed name when "Other village" is chosen
   const [alertAreas, setAlertAreas] = useState({ districts: [], villages: {} });
   const [alertRiskLevel, setAlertRiskLevel] = useState("Severe");
@@ -143,7 +144,7 @@ function App() {
       if (error.status === 403) {
         setSosError(`Geo-Authorization: ${error.message || 'Access restricted to authorized jurisdiction'}`);
       } else if (error.status === 401) {
-        setSosError("Please log out and log in again as Gram Panchayat.");
+        setSosError("Please log out and log in again as an authorized Authority.");
       } else {
         setSosError("Unable to load live SOS data.");
       }
@@ -160,7 +161,7 @@ function App() {
     try {
       setShelterError("");
 
-      const data = await apiFetch("/api/shelters");
+      const data = await apiFetch("/api/shelters?includeClosed=true");
 
       setShelters(data);
     } catch (error) {
@@ -313,7 +314,7 @@ function App() {
     setAlertMessage("");
     setAlertError("");
 
-    // A Gram Panchayat officer can only alert the district they registered with
+    // An Authority officer can only alert the district they registered with
     if (session?.user?.district) {
       setAlertDistrict(session.user.district);
     }
@@ -669,10 +670,11 @@ function App() {
       <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
 
         <div className="brand">
-
-          <div className="brand-icon">
-            🛡️
-          </div>
+          <img
+            className="brand-icon"
+            src="/apple-touch-icon.png"
+            alt="Sahayta Setu logo"
+          />
 
           <div>
             <h2>SAHAYTA SETU</h2>
@@ -708,6 +710,14 @@ function App() {
           >
             <span>▦</span>
             Dashboard
+          </button>
+
+          <button
+            className={`nav-item ${activeView === "analytics" ? "active" : ""}`}
+            onClick={() => openView("analytics")}
+          >
+            <span>▤</span>
+            Analytics & Intelligence
           </button>
 
           <button
@@ -847,7 +857,7 @@ function App() {
               avatarClassName="avatar"
               initials={initials(session.user?.name || "Control Officer")}
               name={session.user?.name || "Panchayat Officer"}
-              subtitle="Gram Panchayat"
+              subtitle="Authority"
               phone={session.user?.phone}
               onLogout={handleLogout}
             />
@@ -1074,7 +1084,10 @@ function App() {
 
 
             <div className="embedded-map">
-              <GramPanchayatMap />
+              <GramPanchayatMap
+                initialPropsState={session?.user?.state || DEFAULT_STATE}
+                initialPropsDistrict={session?.user?.district || DEFAULT_DISTRICT}
+              />
             </div>
 
           </div>
@@ -1696,7 +1709,32 @@ function App() {
 
         {activeView === "audit" && <AuditLogView />}
 
-        {activeView === "map" && <MapView />}
+        {activeView === "analytics" && (
+          <AuthorityAnalyticsDashboard
+            sosRequests={sosRequests}
+            allSOS={allSOS}
+            shelters={shelters}
+            alerts={alerts}
+            ngos={ngos}
+            evacuation={evacuation}
+            user={session?.user}
+            onRefresh={() => {
+              fetchSOSRequests();
+              fetchShelters();
+              fetchAlerts();
+              fetchNgos();
+              fetchEvacuation();
+            }}
+            onNavigateView={openView}
+          />
+        )}
+
+        {activeView === "map" && (
+          <GramPanchayatMap
+            initialPropsState={session?.user?.state || DEFAULT_STATE}
+            initialPropsDistrict={session?.user?.district || DEFAULT_DISTRICT}
+          />
+        )}
 
         {activeView === "evacuation" && (
           <EvacuationView data={evacuation} loading={evacLoading} error={evacError} />

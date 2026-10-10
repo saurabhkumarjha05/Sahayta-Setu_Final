@@ -1,8 +1,11 @@
 process.env.NODE_ENV = 'test';
 const http = require('http');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const { app, memoryStore } = require('./server');
+const AuditLog = require('./models/auditLog');
 const { createToken } = require('./services/auth');
+const { logAuditEvent, queryAuditLogs } = require('./services/auditService');
 const { canonicalStringify, registerDevice, revokeDevice, validateEmergencyPacket } = require('./services/cryptoService');
 const { calculateDistanceKm, matchNearestResponders } = require('./services/matchingService');
 const { verifyJurisdiction, filterByJurisdiction } = require('./services/geoAuth');
@@ -588,6 +591,110 @@ async function runTests() {
     assert(actionsRecorded.has('SOS_ASSIGNED'), 'Audit log records SOS_ASSIGNED event');
     assert(actionsRecorded.has('ALERT_CREATED'), 'Audit log records ALERT_CREATED event');
     assert(actionsRecorded.has('ALERT_RETRANSMITTED'), 'Audit log records ALERT_RETRANSMITTED event');
+
+    const crossJurisdictionAuditRes = await request(
+      '/api/admin/audit-logs?district=Lucknow&state=Uttar%20Pradesh',
+      { headers: { Authorization: `Bearer ${dehradunPanchayatToken}` } }
+    );
+    assert(
+      crossJurisdictionAuditRes.status === 200 &&
+        crossJurisdictionAuditRes.data.every(
+          (log) =>
+            log.jurisdiction?.district === 'Dehradun' &&
+            log.jurisdiction?.state === 'Uttarakhand'
+        ),
+      'Authority audit log queries remain restricted to the signed-in jurisdiction'
+    );
+
+    const superAdminToken = createToken({
+      _id: 'test_super_admin',
+      name: 'Platform Administrator',
+      role: 'super_admin'
+    });
+    const superAdminAuditRes = await request('/api/admin/audit-logs', {
+      headers: { Authorization: `Bearer ${superAdminToken}` }
+    });
+    assert(
+      superAdminAuditRes.status === 403,
+      'Audit log API is unavailable to Super Admin accounts'
+    );
+
+    const previousReadyState = mongoose.connection.readyState;
+    const originalAuditCreate = AuditLog.create;
+    const originalAuditFind = AuditLog.find;
+    let persistedAuditEntry;
+    let auditQuery;
+    try {
+      mongoose.connection.readyState = 1;
+      AuditLog.create = async (entry) => {
+        persistedAuditEntry = new AuditLog(entry);
+        await persistedAuditEntry.validate();
+        return persistedAuditEntry;
+      };
+      AuditLog.find = (query) => ({
+        sort: () => ({
+          limit: async () => {
+            auditQuery = query;
+            return [persistedAuditEntry];
+          }
+        })
+      });
+
+      await logAuditEvent({
+        actorId: 'audit-test-admin',
+        actorName: 'Audit Test Admin',
+        actorRole: 'super_admin',
+        action: 'SOS_DETAILS_UPDATED',
+        jurisdiction: { state: 'Uttar Pradesh', district: 'Gautam Buddha Nagar' }
+      });
+      assert(
+        persistedAuditEntry && mongoose.isValidObjectId(persistedAuditEntry._id),
+        'Audit events persist using MongoDB-compatible ObjectIds'
+      );
+
+      const persistedAuditLogs = await queryAuditLogs({ district: 'Gautam Buddha Nagar', limit: 10 });
+      assert(
+        persistedAuditLogs.length === 1 &&
+          auditQuery['jurisdiction.district'].test('Gautam Buddha Nagar'),
+        'Audit log queries return MongoDB results with jurisdiction filters'
+      );
+
+      AuditLog.find = () => ({
+        sort: () => ({
+          limit: async () => {
+            throw new Error('audit query unavailable');
+          }
+        })
+      });
+      let auditQueryError;
+      try {
+        await queryAuditLogs();
+      } catch (error) {
+        auditQueryError = error;
+      }
+      assert(
+        auditQueryError?.message === 'audit query unavailable',
+        'Audit query failures are surfaced instead of silently returning an empty list'
+      );
+
+      AuditLog.create = async () => {
+        throw new Error('audit storage unavailable');
+      };
+      let auditWriteError;
+      try {
+        await logAuditEvent({ action: 'SOS_DETAILS_UPDATED' });
+      } catch (error) {
+        auditWriteError = error;
+      }
+      assert(
+        auditWriteError?.message === 'audit storage unavailable',
+        'Audit persistence failures are surfaced instead of silently ignored'
+      );
+    } finally {
+      mongoose.connection.readyState = previousReadyState;
+      AuditLog.create = originalAuditCreate;
+      AuditLog.find = originalAuditFind;
+    }
 
     // -------------------------------------------------------------
     // Test 15: SOS Lite & Low-Network Resilience Verification

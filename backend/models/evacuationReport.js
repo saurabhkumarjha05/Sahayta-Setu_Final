@@ -17,7 +17,9 @@ const evacuationReportSchema = new mongoose.Schema({
   elsewhere: { type: Number, default: 0, min: 0 },      // went somewhere, place not known
 
   shelter: { type: mongoose.Schema.Types.ObjectId, ref: 'Shelter', default: null },
-  shelterName: { type: String, default: null }
+  shelterName: { type: String, default: null },
+  needsReview: { type: Boolean, default: false },
+  reviewReason: { type: String, default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.model('EvacuationReport', evacuationReportSchema);

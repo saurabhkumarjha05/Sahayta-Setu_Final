@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node test-disaster-system.js",
+    "test:intelligence": "node test-intelligence.js",
     "test:auth": "node test-auth-mongo.js",
     "test:real-data": "node test-real-data-flow.js",
     "test:phase3": "node test-ui-phase3.js",

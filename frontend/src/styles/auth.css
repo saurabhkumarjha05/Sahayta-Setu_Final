@@ -148,10 +148,11 @@
 }
 
 .auth-v2 .auth-header-logo {
-  width: 32px;
+  width: 42px;
   height: 32px;
   border-radius: 8px;
   object-fit: contain;
+  background: #ffffff;
   flex-shrink: 0;
 }
 

@@ -3,9 +3,9 @@
  * Centralized constant for default state selection across dropdowns.
  */
 
-export const DEFAULT_STATE = 'Uttarakhand';
-export const DEFAULT_STATE_CODE = 'UK';
-export const DEFAULT_DISTRICT = 'Dehradun';
+export const DEFAULT_STATE = 'Uttar Pradesh';
+export const DEFAULT_STATE_CODE = 'UP';
+export const DEFAULT_DISTRICT = 'Gautam Buddha Nagar';
 
 export const STATE_CODE_MAP = {
   'Uttarakhand': 'UK',

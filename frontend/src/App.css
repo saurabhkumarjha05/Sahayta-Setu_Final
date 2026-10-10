@@ -55,11 +55,12 @@ button {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: #e4572e;
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 21px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .brand h2 {

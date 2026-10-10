@@ -152,6 +152,8 @@ function TriageModal({ sos, onClose, onAssigned }) {
   const [selectedResponderId, setSelectedResponderId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [intelligenceReport, setIntelligenceReport] = useState(null);
+  const [loadingIntelligence, setLoadingIntelligence] = useState(false);
 
   const CAP_OPTIONS = [
     'Medical',
@@ -209,6 +211,19 @@ function TriageModal({ sos, onClose, onAssigned }) {
     setCapabilities((prev) =>
       prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
     );
+  };
+
+  const loadIntelligenceReport = async () => {
+    setLoadingIntelligence(true);
+    setError('');
+    try {
+      const report = await apiFetch(`/api/sos/${encodeURIComponent(sosId)}/intelligence-report`);
+      setIntelligenceReport(report);
+    } catch (e) {
+      setError(e.message || 'Unable to load incident analysis.');
+    } finally {
+      setLoadingIntelligence(false);
+    }
   };
 
   const handleDispatch = async () => {
@@ -380,6 +395,39 @@ function TriageModal({ sos, onClose, onAssigned }) {
         </div>
 
         {/* 2. Priority Selection */}
+        <section style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <strong>AI-assisted incident analysis</strong>
+              <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.82rem' }}>
+                Advisory only; an authorized officer must verify priorities and every evacuation decision.
+              </p>
+            </div>
+            <button type="button" className="cc-secondary-btn" onClick={loadIntelligenceReport} disabled={loadingIntelligence}>
+              {loadingIntelligence ? 'Analyzing…' : 'Generate incident report'}
+            </button>
+          </div>
+          {(intelligenceReport?.analysis || sos?.aiAssessment) && (
+            <div style={{ marginTop: '12px', color: '#334155', fontSize: '0.85rem' }}>
+              <strong>Suggested priority: {intelligenceReport?.analysis?.explainablePriority?.level || sos.aiAssessment.level}</strong>
+              <p style={{ margin: '4px 0' }}>
+                {intelligenceReport?.analysis?.explainablePriority?.explanation || sos.aiAssessment.explanation}
+              </p>
+              {(intelligenceReport?.urgentNeeds || sos.aiAssessment.urgentNeeds || []).length > 0
+                && <p style={{ margin: '4px 0' }}>Needs to verify: {(intelligenceReport?.urgentNeeds || sos.aiAssessment.urgentNeeds).join(', ')}</p>}
+              {intelligenceReport?.possibleDuplicates?.isPossibleDuplicate
+                && <p role="status" style={{ color: '#9a3412', margin: '4px 0' }}>
+                  Possible duplicate: {intelligenceReport.possibleDuplicates.duplicateCount} nearby report(s); verify before merging.
+                </p>}
+              {intelligenceReport?.sourceReferences?.map((source) => source.url && (
+                <a key={source.url} href={source.url} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                  Source: {source.sourceName}
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+
         <div>
           <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
             Emergency Priority Level
@@ -387,7 +435,7 @@ function TriageModal({ sos, onClose, onAssigned }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
             {[
               { id: 'LOW', label: 'Low', color: '#16a34a', bg: '#f0fdf4' },
-              { id: 'MODERATE', label: 'Moderate', color: '#ca8a04', bg: '#fefce8' },
+              { id: 'MEDIUM', label: 'Medium', color: '#ca8a04', bg: '#fefce8' },
               { id: 'HIGH', label: 'High', color: '#ea580c', bg: '#fff7ed' },
               { id: 'CRITICAL', label: 'Critical', color: '#dc2626', bg: '#fef2f2' }
             ].map((p) => {
@@ -895,6 +943,7 @@ function ShelterRow({ shelter, onChanged }) {
   const used = shelter.currentOccupancy || 0;
   const percent = capacity ? Math.min(100, Math.round((used / capacity) * 100)) : 0;
   const full = shelter.status === "Full" || (capacity > 0 && used >= capacity);
+  const inactive = shelter.status === "CLOSED" || Boolean(shelter.removedAt);
 
   const setOccupancy = async (value) => {
     const occupancy = Math.max(0, Math.min(capacity, Math.round(Number(value))));
@@ -925,10 +974,37 @@ function ShelterRow({ shelter, onChanged }) {
     }
   };
 
+  const deactivate = async () => {
+    if (!window.confirm(`Deactivate "${shelter.name}"? It will no longer appear as an open nearby shelter.`)) return;
+    setSaving(true);
+    setError("");
+    try {
+      await apiFetch(`/api/shelters/${shelter._id}/close`, { method: "POST" });
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const restore = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      await apiFetch(`/api/shelters/${shelter._id}/restore`, { method: "POST" });
+      onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="cc-row">
-      <span className={`cc-status ${full ? "cc-status-full" : "cc-status-available"}`}>
-        {full ? "Full" : "Available"}
+      <span className={`cc-status ${inactive ? "cc-status-full" : full ? "cc-status-full" : "cc-status-available"}`}>
+        {inactive ? "Inactive" : full ? "Full" : "Available"}
       </span>
 
       <div className="cc-row-main">
@@ -945,7 +1021,7 @@ function ShelterRow({ shelter, onChanged }) {
         {error && <p className="cc-form-error">{error}</p>}
       </div>
 
-      <div className="cc-occupancy" title="People in the shelter now">
+      {!inactive && <div className="cc-occupancy" title="People in the shelter now">
         <button type="button" onClick={() => setOccupancy(used - 1)} disabled={saving || used <= 0}>−</button>
         <input
           value={draft ?? used}
@@ -956,7 +1032,7 @@ function ShelterRow({ shelter, onChanged }) {
           disabled={saving}
         />
         <button type="button" onClick={() => setOccupancy(used + 1)} disabled={saving || used >= capacity}>+</button>
-      </div>
+      </div>}
 
       <div className="cc-row-meta">
         {shelter.lat && shelter.lng && (
@@ -964,7 +1040,14 @@ function ShelterRow({ shelter, onChanged }) {
             📍 Location
           </a>
         )}
-        <button type="button" className="cc-link-danger" onClick={remove}>Remove</button>
+        {inactive ? (
+          <button type="button" className="cc-secondary-btn" onClick={restore} disabled={saving}>Restore</button>
+        ) : (
+          <>
+            <button type="button" className="cc-secondary-btn" onClick={deactivate} disabled={saving}>Deactivate</button>
+            <button type="button" className="cc-link-danger" onClick={remove} disabled={saving}>Remove</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1211,6 +1294,11 @@ export function EvacuationView({ data, loading, error }) {
                       {report.atHome} at home · {report.elsewhere} place unknown
                       {unaccounted > 0 ? ` · ${unaccounted} not reported` : ""}
                     </p>
+                    {report.needsReview && (
+                      <p role="status" style={{ color: '#9a3412', fontWeight: 700 }}>
+                        ⚠ Needs review: {report.reviewReason || 'Reconfirm the current shelter destination and capacity.'}
+                      </p>
+                    )}
                   </div>
                   <div className="cc-row-meta">
                     <span>{timeAgo(report.updatedAt)}</span>
@@ -1341,7 +1429,7 @@ export function VerificationCenterView() {
     <section className="cc-view">
       <ViewHeader
         title="Verification Center"
-        subtitle="Review, authenticate and manage Panchayats, District Authorities, NGOs and Rescue Units"
+        subtitle="Review, authenticate and manage Authorities, NGOs and Rescue Units"
       >
         <button className="cc-secondary-btn" onClick={loadEntities}>
           🔄 Refresh
@@ -1497,7 +1585,7 @@ export function VerificationCenterView() {
                     onChange={(e) => setEditAuthorityLevel(e.target.value)}
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                   >
-                    <option value="GRAM_PANCHAYAT">Gram Panchayat</option>
+                    <option value="GRAM_PANCHAYAT">Local Authority</option>
                     <option value="DISTRICT">District Authority</option>
                     <option value="STATE">State Authority</option>
                   </select>

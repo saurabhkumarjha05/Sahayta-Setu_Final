@@ -22,8 +22,16 @@ const sosSchema = new mongoose.Schema({
   isApproximateLocation: { type: Boolean, default: false },
   priority: {
     type: String,
-    enum: ['LOW', 'MODERATE', 'HIGH', 'SEVERE', 'CRITICAL'],
+    enum: ['LOW', 'MODERATE', 'MEDIUM', 'HIGH', 'SEVERE', 'CRITICAL'],
     default: 'HIGH'
+  },
+  aiAssessment: {
+    level: { type: String, enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
+    score: { type: Number, min: 0 },
+    explanation: { type: String, default: '' },
+    urgentNeeds: [{ type: String }],
+    assessedAt: { type: Date, default: Date.now },
+    advisoryOnly: { type: Boolean, default: true }
   },
   description: String,
   type: {

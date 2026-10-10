@@ -2,7 +2,7 @@
 // Offline SOS Queue Synchronization, Web Push Alerts & Emergency Audio Precaching
 
 const CACHE_PREFIX = "sahayta-";
-const CACHE_NAME = "sahayta-assets-v2";
+const CACHE_NAME = "sahayta-assets-v3";
 const DB_NAME = "sosDB";
 const QUEUE_STORE = "emergencySOSQueue";
 const ALERTS_STORE = "alertsCacheStore";
@@ -16,6 +16,10 @@ const PRECACHE_URLS = [
   "/",
   "/index.html",
   "/favicon.svg",
+  "/logo_hackathon.jpeg",
+  "/logo-192.png",
+  "/logo-512.png",
+  "/apple-touch-icon.png",
   "/icons.svg",
   "/EmergencyAlert-Hindi.mp3",
   "/manifest.webmanifest",
@@ -309,8 +313,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: data.body || "Critical warning issued for your region. Tap for safety instructions.",
-    icon: "/favicon.svg",
-    badge: "/favicon.svg",
+    icon: "/logo-192.png",
+    badge: "/logo-192.png",
     vibrate: vibrationPattern,
     tag: `sahayta-alert-${data.alertId || Date.now()}`,
     renotify: true,

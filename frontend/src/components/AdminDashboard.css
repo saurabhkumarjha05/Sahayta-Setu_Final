@@ -49,9 +49,11 @@
 }
 
 .admin-brand-logo {
-  width: 34px;
+  width: 44px;
   height: 34px;
   border-radius: 8px;
+  object-fit: contain;
+  background: #ffffff;
 }
 
 .admin-brand-title {

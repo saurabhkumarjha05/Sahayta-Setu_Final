@@ -42,14 +42,18 @@ function canonicalStringify(obj) {
 function buildSosLitePayload(data) {
   const lat = Number(data.lat !== undefined ? data.lat : data.latitude);
   const lng = Number(data.lng !== undefined ? data.lng : data.longitude);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90
+    || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+    throw new TypeError('A valid incident latitude and longitude are required.');
+  }
 
   return {
     v: SOS_LITE_VERSION,
     clientIncidentId: String(data.clientIncidentId || ''),
     deviceId: String(data.deviceId || ''),
     incidentType: String(data.incidentType || data.type || 'Medical'),
-    lat: Number.isFinite(lat) ? Math.round(lat * 1e6) / 1e6 : 30.3165,
-    lng: Number.isFinite(lng) ? Math.round(lng * 1e6) / 1e6 : 78.0322,
+    lat: Math.round(lat * 1e6) / 1e6,
+    lng: Math.round(lng * 1e6) / 1e6,
     locationSource: data.locationSource || 'GPS_EXACT',
     locationAccuracy: Math.round(Number(data.locationAccuracy || 18)),
     peopleAffected: Math.max(1, Math.round(Number(data.peopleAffected || 1))),

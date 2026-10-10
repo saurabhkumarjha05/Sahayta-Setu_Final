@@ -392,8 +392,8 @@ function Login({ onLogin }) {
         <div className="auth-header-inner">
           <div className="auth-header-brand">
             <img
-              src="/icon-192.svg"
-              alt="Sahayta Setu Shield Logo"
+              src="/logo_hackathon.jpeg"
+              alt="Sahayta Setu logo"
               className="auth-header-logo"
               width="32"
               height="32"
@@ -1010,7 +1010,7 @@ function Login({ onLogin }) {
                       style={{ width: "100%", padding: "12px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", minHeight: "48px" }}
                     >
                       <option value="NGO">Non-Governmental Organization (NGO)</option>
-                      <option value="PANCHAYAT">Gram Panchayat Authority</option>
+                      <option value="PANCHAYAT">Local Authority</option>
                       <option value="DISTRICT_AUTHORITY">District Disaster Authority</option>
                     </select>
                   </div>
@@ -1149,7 +1149,7 @@ function Login({ onLogin }) {
                     required={true}
                   />
 
-                  {/* Gram Panchayat specific fields */}
+                  {/* Local Authority registration fields */}
                   {orgType === "PANCHAYAT" && (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                       <div className="auth-input-group">
@@ -1170,7 +1170,7 @@ function Login({ onLogin }) {
                       </div>
                       <div className="auth-input-group">
                         <label className="auth-section-label" htmlFor="reg-panch">
-                          {t("auth.panchayatLabel") || "Panchayat ID"}
+                          {t("auth.panchayatLabel") || "Authority ID"}
                         </label>
                         <div className="auth-input-box">
                           <input
