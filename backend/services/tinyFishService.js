@@ -18,7 +18,7 @@ async function collectDisasterAlerts({
   district = 'Gautam Buddha Nagar',
   keywords = ['disaster alert', 'weather warning', 'flood', 'heavy rainfall']
 } = {}) {
-  const apiKey = process.env.TINYFISH_API_KEY;
+  const apiKey = process.env.TINYFISH_API_KEY?.trim();
   if (!apiKey) {
     const error = new Error('TinyFish is not configured. Set TINYFISH_API_KEY on the backend.');
     error.code = 'TINYFISH_NOT_CONFIGURED';
@@ -37,7 +37,14 @@ async function collectDisasterAlerts({
     timeout: 15000
   });
 
-  const results = Array.isArray(response.data?.results) ? response.data.results : [];
+  if (!Array.isArray(response.data?.results)) {
+    const error = new Error('TinyFish returned an unexpected search response.');
+    error.code = 'TINYFISH_INVALID_RESPONSE';
+    throw error;
+  }
+
+  const results = response.data.results;
+  const observedAt = new Date().toISOString();
   return results
     .filter((result) => result && isOfficialSource(result.url))
     .slice(0, 20)
@@ -46,8 +53,9 @@ async function collectDisasterAlerts({
       title: result.title || 'Untitled source result',
       description: result.snippet || '',
       url: result.url,
-      publishedAt: result.published_at || result.published_date || null,
-      observedAt: new Date().toISOString(),
+      publishedAt: [result.published_at, result.published_date]
+        .find((value) => value && Number.isFinite(Date.parse(value))) || null,
+      observedAt,
       affectedAreaQuery: `${district}, ${state}`,
       classification: 'UNVERIFIED_SOURCE_CANDIDATE'
     }));

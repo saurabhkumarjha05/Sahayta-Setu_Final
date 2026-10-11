@@ -85,6 +85,12 @@ async function run() {
     assert.equal(alerts.length, 1);
     assert.equal(alerts[0].classification, 'UNVERIFIED_SOURCE_CANDIDATE');
     assert.equal(alerts[0].url, 'https://ndma.gov.in/warning');
+
+    axios.get = async () => ({ data: {} });
+    await assert.rejects(
+      collectDisasterAlerts(),
+      (error) => error.code === 'TINYFISH_INVALID_RESPONSE'
+    );
   } finally {
     axios.get = originalGet;
     if (previousKey === undefined) delete process.env.TINYFISH_API_KEY;

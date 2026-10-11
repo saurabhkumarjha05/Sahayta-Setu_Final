@@ -323,8 +323,8 @@ async function sendTargetedPush({ title, body, severity = 'High', alertId, targe
   const payload = JSON.stringify({
     title: title || `🚨 SAHAYTA SETU ALERT: ${targetDistrict || 'Emergency'}`,
     body: body || 'Official emergency instructions issued. Tap to view.',
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    icon: '/logo-192.png',
+    badge: '/logo-192.png',
     severity,
     alertId,
     targetState,
@@ -383,8 +383,8 @@ async function sendSOSAuthorityNotification(sos) {
   const payload = JSON.stringify({
     title: `🚨 SOS ${sos.priority || 'HIGH'} · ${sos.district || 'Emergency'}`,
     body: `${sos.type || 'Emergency'} reported from ${village}. Open Sahayta Setu to respond.`,
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    icon: '/logo-192.png',
+    badge: '/logo-192.png',
     severity: sos.priority || 'HIGH',
     alertId: sos.clientIncidentId || sos._id,
     targetState: sos.state,
