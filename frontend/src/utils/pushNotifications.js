@@ -27,7 +27,10 @@ export async function registerPushNotifications({ state, district, user }) {
 
     // Get VAPID public key from backend
     const keyRes = await fetch(`${API_URL}/api/alerts/vapid-public-key`);
-    if (!keyRes.ok) throw new Error('Could not fetch VAPID key');
+    if (!keyRes.ok) {
+      const details = await keyRes.json().catch(() => ({}));
+      throw new Error(details.error || `Web Push setup unavailable (${keyRes.status})`);
+    }
     const { publicKey } = await keyRes.json();
 
     const registration = await navigator.serviceWorker.ready;
@@ -43,7 +46,7 @@ export async function registerPushNotifications({ state, district, user }) {
 
     // Send subscription to backend with district & state targeting
     const token = getToken();
-    await fetch(`${API_URL}/api/alerts/subscribe`, {
+    const subscribeRes = await fetch(`${API_URL}/api/alerts/subscribe`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,6 +58,10 @@ export async function registerPushNotifications({ state, district, user }) {
         state: state || user?.state || 'Uttarakhand'
       })
     });
+    if (!subscribeRes.ok) {
+      const details = await subscribeRes.json().catch(() => ({}));
+      throw new Error(details.error || `Push subscription failed (${subscribeRes.status})`);
+    }
 
     console.log(`✓ Web Push subscription registered for ${district}, ${state}`);
     return { supported: true, status: 'subscribed', subscription };

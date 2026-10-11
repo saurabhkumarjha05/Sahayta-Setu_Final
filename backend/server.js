@@ -40,7 +40,8 @@ const {
   savePushSubscription,
   sendTargetedPush,
   sendSOSAuthorityNotification,
-  VAPID_PUBLIC_KEY
+  VAPID_PUBLIC_KEY,
+  webPushEnabled
 } = require('./services/realtimeService');
 const {
   SOS_LITE_VERSION,
@@ -77,6 +78,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
     db: isDbConnected ? 'connected' : 'down',
+    webPush: webPushEnabled() ? 'enabled' : 'disabled',
     time: new Date().toISOString()
   });
 });
@@ -1233,7 +1235,10 @@ app.post('/api/auth/devices/revoke', optionalAuth, async (req, res) => {
 // Get Web Push VAPID Public Key
 app.get('/api/alerts/vapid-public-key', (req, res) => {
   if (!VAPID_PUBLIC_KEY) {
-    return res.status(503).json({ error: 'Web Push is not configured on this server.' });
+    return res.status(503).json({
+      error: 'Web Push is not configured on this server.',
+      code: 'WEB_PUSH_NOT_CONFIGURED'
+    });
   }
   res.json({ publicKey: VAPID_PUBLIC_KEY });
 });

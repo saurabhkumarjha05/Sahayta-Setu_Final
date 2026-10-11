@@ -279,6 +279,21 @@ Permanent errors (revoked device, invalid signature, validation) become `SYNC_RE
 **Security:** JWT, bcrypt, Web Crypto ECDSA P-256, role-based and geographic authorization, rate limiting, input validation, audit logging
 **Notifications:** Web Push, Socket.IO (no Firebase)
 
+For production background push notifications, set these backend-only variables in
+the Render backend service (never in `VITE_*` variables):
+
+```text
+VAPID_PUBLIC_KEY=<generated public key>
+VAPID_PRIVATE_KEY=<generated private key>
+VAPID_EMAIL=mailto:alerts@your-domain.example
+```
+
+Generate a pair locally from the backend directory with
+`npx web-push generate-vapid-keys`, then copy the values to Render. The
+`/api/health` response reports `webPush: "enabled"` when the backend loaded the
+keys. Existing browser/PWA installations must grant notification permission and
+reopen once after deployment so their subscription is registered.
+
 ---
 
 ## 📁 Project Structure

@@ -11,12 +11,14 @@ let persistedSubscriptionsLoaded = false;
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 const VAPID_EMAIL = process.env.VAPID_EMAIL || '';
+let webPushEnabled = false;
 
 try {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY || !VAPID_EMAIL) {
     throw new Error('VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_EMAIL are required for web push.');
   }
   webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  webPushEnabled = true;
 } catch (err) {
   console.warn('Web Push is disabled:', err.message);
 }
@@ -385,18 +387,20 @@ async function sendTargetedPush({ title, body, severity = 'High', alertId, targe
   let sentCount = 0;
   let failCount = 0;
 
-  for (const [endpoint, subMeta] of pushSubscriptions.entries()) {
-    const matchesDistrict = !distLower || subMeta.district === distLower;
-    const matchesState = !stateLower || subMeta.state === stateLower;
+  if (webPushEnabled) {
+    for (const [endpoint, subMeta] of pushSubscriptions.entries()) {
+      const matchesDistrict = !distLower || subMeta.district === distLower;
+      const matchesState = !stateLower || subMeta.state === stateLower;
 
-    if (matchesDistrict && matchesState) {
-      try {
-        await webpush.sendNotification(subMeta.subscription, payload);
-        sentCount++;
-      } catch (err) {
-        failCount++;
-        if (err.statusCode === 404 || err.statusCode === 410) {
-          pushSubscriptions.delete(endpoint);
+      if (matchesDistrict && matchesState) {
+        try {
+          await webpush.sendNotification(subMeta.subscription, payload);
+          sentCount++;
+        } catch (err) {
+          failCount++;
+          if (err.statusCode === 404 || err.statusCode === 410) {
+            pushSubscriptions.delete(endpoint);
+          }
         }
       }
     }
@@ -410,7 +414,7 @@ async function sendTargetedPush({ title, body, severity = 'High', alertId, targe
     io.emit('alert:published', alertData);
   }
 
-  return { sentCount, failCount, totalSubscribers: pushSubscriptions.size };
+  return { sentCount, failCount, totalSubscribers: pushSubscriptions.size, enabled: true };
 }
 
 /**
@@ -519,6 +523,7 @@ module.exports = {
   getIo,
   setSosLiteSocketHandler,
   VAPID_PUBLIC_KEY,
+  webPushEnabled: () => webPushEnabled,
   broadcastNewSOS,
   broadcastSOSAssigned,
   broadcastResponderLocation,
