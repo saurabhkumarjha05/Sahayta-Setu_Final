@@ -1,11 +1,14 @@
 import { io } from 'socket.io-client';
-import { API_URL } from '../api';
+import { API_URL, getToken } from '../api';
 
 let socket = null;
 
 export function getSocket() {
   if (!socket) {
     socket = io(API_URL, {
+      auth: {
+        token: getToken() || undefined
+      },
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,

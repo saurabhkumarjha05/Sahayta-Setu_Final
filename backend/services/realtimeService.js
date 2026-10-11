@@ -5,6 +5,7 @@ const { verifyTokenString } = require('./auth');
 let io = null;
 let sosLiteSocketHandler = null;
 const pushSubscriptions = new Map(); // endpoint -> { subscription, district, state, userId, role }
+let persistedSubscriptionsLoaded = false;
 
 // Setup VAPID keys for Web Push
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
@@ -306,20 +307,65 @@ function broadcastResponderLocation(update) {
  */
 function savePushSubscription(subscription, metadata = {}) {
   if (!subscription || !subscription.endpoint) return;
-  pushSubscriptions.set(subscription.endpoint, {
+  const userId = metadata.userId && mongoose.isValidObjectId(metadata.userId)
+    ? metadata.userId
+    : null;
+  const normalized = {
     subscription,
     district: metadata.district ? String(metadata.district).trim().toLowerCase() : null,
     state: metadata.state ? String(metadata.state).trim().toLowerCase() : null,
-    userId: metadata.userId || null,
+    userId,
     role: metadata.role || 'villager',
     updatedAt: Date.now()
-  });
+  };
+  pushSubscriptions.set(subscription.endpoint, normalized);
+
+  if (mongoose.connection && mongoose.connection.readyState === 1) {
+    try {
+      const PushSubscription = require('../models/pushSubscription');
+      PushSubscription.findOneAndUpdate(
+        { endpoint: subscription.endpoint },
+        {
+          endpoint: subscription.endpoint,
+          ...normalized,
+          updatedAt: new Date()
+        },
+        { upsert: true, setDefaultsOnInsert: true }
+      ).catch((err) => console.warn('Push subscription persistence notice:', err.message));
+    } catch (err) {
+      console.warn('Push subscription model notice:', err.message);
+    }
+  }
+}
+
+async function loadPersistedPushSubscriptions() {
+  if (persistedSubscriptionsLoaded || !(mongoose.connection && mongoose.connection.readyState === 1)) return;
+  try {
+    const PushSubscription = require('../models/pushSubscription');
+    const records = await PushSubscription.find({}).lean();
+    records.forEach((record) => {
+      if (record.endpoint && record.subscription) {
+        pushSubscriptions.set(record.endpoint, {
+          subscription: record.subscription,
+          district: record.district,
+          state: record.state,
+          userId: record.userId ? String(record.userId) : null,
+          role: record.role || 'villager',
+          updatedAt: record.updatedAt || Date.now()
+        });
+      }
+    });
+    persistedSubscriptionsLoaded = true;
+  } catch (err) {
+    console.warn('Push subscription restore notice:', err.message);
+  }
 }
 
 /**
  * Send targeted Web Push notification to users in an affected district/state
  */
 async function sendTargetedPush({ title, body, severity = 'High', alertId, targetState, targetDistrict, url = '/' }) {
+  await loadPersistedPushSubscriptions();
   const payload = JSON.stringify({
     title: title || `🚨 SAHAYTA SETU ALERT: ${targetDistrict || 'Emergency'}`,
     body: body || 'Official emergency instructions issued. Tap to view.',
@@ -340,8 +386,8 @@ async function sendTargetedPush({ title, body, severity = 'High', alertId, targe
   let failCount = 0;
 
   for (const [endpoint, subMeta] of pushSubscriptions.entries()) {
-    const matchesDistrict = !distLower || !subMeta.district || subMeta.district === distLower;
-    const matchesState = !stateLower || !subMeta.state || subMeta.state === stateLower;
+    const matchesDistrict = !distLower || subMeta.district === distLower;
+    const matchesState = !stateLower || subMeta.state === stateLower;
 
     if (matchesDistrict && matchesState) {
       try {
@@ -371,6 +417,7 @@ async function sendTargetedPush({ title, body, severity = 'High', alertId, targe
  * Send a new SOS notification only to authority subscriptions covering its area.
  */
 async function sendSOSAuthorityNotification(sos) {
+  await loadPersistedPushSubscriptions();
   const authorityRoles = new Set([
     'control',
     'panchayat',

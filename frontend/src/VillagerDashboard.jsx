@@ -15,7 +15,7 @@ import {
   clearRejectedReports
 } from "./utils/offlineSOS";
 import { registerDeviceWithBackend } from "./utils/trustedDevice";
-import { registerPushNotifications } from "./utils/pushNotifications";
+import { getCachedAlerts, registerPushNotifications } from "./utils/pushNotifications";
 import { getSocket, subscribeToDistrict } from "./utils/socketClient";
 import NearbyResourcesMap from "./components/map/NearbyResourcesMap";
 import { useI18n } from "./i18n";
@@ -144,7 +144,13 @@ function VillagerDashboard({ user, onLogout }) {
         const data = await apiFetch(`/api/alerts${query}`);
         setAlerts(Array.isArray(data) ? data : []);
       } catch (err) {
-        console.warn("Could not load alerts:", err.message);
+        const cached = await getCachedAlerts();
+        const relevant = cached.filter((alert) =>
+          (!alert.state || alert.state.toLowerCase() === selectedState.toLowerCase()) &&
+          (!alert.district || alert.district.toLowerCase() === selectedDistrict.toLowerCase())
+        );
+        if (relevant.length) setAlerts(relevant);
+        console.warn("Could not load live alerts; using cached alerts:", err.message);
       }
     };
     loadAlerts();

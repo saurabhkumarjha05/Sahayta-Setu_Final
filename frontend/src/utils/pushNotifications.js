@@ -63,3 +63,32 @@ export async function registerPushNotifications({ state, district, user }) {
     return { supported: true, status: 'error', error: err.message };
   }
 }
+
+export async function getCachedAlerts() {
+  if (!('indexedDB' in window)) return [];
+  return new Promise((resolve) => {
+    const request = indexedDB.open('sosDB', 2);
+    request.onerror = () => resolve([]);
+    request.onsuccess = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains('alertsCacheStore')) {
+        db.close();
+        resolve([]);
+        return;
+      }
+      const read = db.transaction('alertsCacheStore', 'readonly')
+        .objectStore('alertsCacheStore')
+        .getAll();
+      read.onsuccess = () => {
+        db.close();
+        resolve(Array.isArray(read.result)
+          ? read.result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          : []);
+      };
+      read.onerror = () => {
+        db.close();
+        resolve([]);
+      };
+    };
+  });
+}

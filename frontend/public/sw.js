@@ -315,7 +315,7 @@ self.addEventListener("push", (event) => {
     icon: "/logo-192.png",
     badge: "/logo-192.png",
     vibrate: vibrationPattern,
-    tag: `sahayta-alert-${data.alertId || Date.now()}`,
+    tag: `sahayta-current-alert-${String(data.targetDistrict || "region").toLowerCase()}`,
     renotify: true,
     requireInteraction: severity === "critical" || severity === "severe" || severity === "high",
     data: {
