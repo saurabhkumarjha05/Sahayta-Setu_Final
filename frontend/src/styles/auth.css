@@ -252,7 +252,7 @@
   padding-top: 64px;
   min-height: calc(100dvh - 64px);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
@@ -585,6 +585,15 @@
 @media (min-width: 1280px) {
   .auth-v2 .auth-card {
     padding: 36px 32px;
+  }
+}
+
+/* Keep the full registration form reachable below the fixed header. */
+@media (min-width: 1024px) {
+  .auth-v2 .auth-card {
+    max-height: calc(100dvh - 112px);
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 }
 
