@@ -76,6 +76,7 @@ export async function getCachedAlerts() {
         resolve([]);
         return;
       }
+
       const read = db.transaction('alertsCacheStore', 'readonly')
         .objectStore('alertsCacheStore')
         .getAll();
@@ -91,4 +92,29 @@ export async function getCachedAlerts() {
       };
     };
   });
+}
+
+export async function showRealtimeAlertNotification(alert) {
+  if (!alert || !('serviceWorker' in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const severity = String(alert.severity || alert.riskLevel || 'High').toLowerCase();
+    await registration.showNotification(
+      alert.title || '🚨 Sahayta Setu emergency alert',
+      {
+        body: alert.body || alert.message || 'Official emergency alert issued for your region.',
+        icon: '/logo-192.png',
+        badge: '/logo-192.png',
+        tag: `sahayta-current-alert-${String(alert.targetDistrict || alert.district || 'region').toLowerCase()}`,
+        renotify: true,
+        requireInteraction: ['critical', 'severe', 'high'].includes(severity),
+        vibrate: ['critical', 'severe'].includes(severity)
+          ? [300, 100, 300, 100, 500]
+          : [200, 100, 300],
+        data: { url: '/', alertId: alert.alertId || alert._id }
+      }
+    );
+  } catch (error) {
+    console.warn('Realtime notification notice:', error.message);
+  }
 }

@@ -35,3 +35,18 @@ export function subscribeToDistrict(district, role) {
     s.emit('join:role', role);
   }
 }
+
+export function refreshSocketAuth() {
+  if (!socket) return;
+  socket.auth = { token: getToken() || undefined };
+  if (socket.connected) {
+    socket.disconnect();
+    socket.connect();
+  }
+}
+
+export function disconnectSocket() {
+  if (!socket) return;
+  socket.disconnect();
+  socket = null;
+}

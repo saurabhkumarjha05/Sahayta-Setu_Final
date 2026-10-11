@@ -2512,6 +2512,8 @@ button {
 
   .villager-region-fields .location-field {
     width: 100%;
+    flex: 0 0 auto;
+    margin-top: 0;
   }
 
   .villager-gps-status {

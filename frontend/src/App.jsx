@@ -23,7 +23,7 @@ import "./App.css";
 import LocationSelector from "./components/LocationSelector";
 import { InstallPrompt } from "./components/ui";
 import { NearbyMeshControl } from "./components/ui/NearbyMeshControl";
-import { getSocket, subscribeToDistrict } from "./utils/socketClient";
+import { getSocket, refreshSocketAuth, subscribeToDistrict } from "./utils/socketClient";
 import { registerDeviceWithBackend } from "./utils/trustedDevice";
 import { registerPushNotifications } from "./utils/pushNotifications";
 import { DEFAULT_STATE, DEFAULT_DISTRICT } from "./config/locationConfig";
@@ -95,6 +95,7 @@ function App() {
   const handleLogin = (newSession) => {
     saveSession(newSession);
     setSession(newSession);
+    refreshSocketAuth();
 
     // Register trusted emergency device in background for EVERY logged-in account
     if (newSession?.token) {

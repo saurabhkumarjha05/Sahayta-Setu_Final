@@ -15,7 +15,7 @@ import {
   clearRejectedReports
 } from "./utils/offlineSOS";
 import { registerDeviceWithBackend } from "./utils/trustedDevice";
-import { getCachedAlerts, registerPushNotifications } from "./utils/pushNotifications";
+import { getCachedAlerts, registerPushNotifications, showRealtimeAlertNotification } from "./utils/pushNotifications";
 import { getSocket, subscribeToDistrict } from "./utils/socketClient";
 import NearbyResourcesMap from "./components/map/NearbyResourcesMap";
 import { useI18n } from "./i18n";
@@ -163,6 +163,7 @@ function VillagerDashboard({ user, onLogout }) {
 
     const handleAlertPublished = (alertData) => {
       setAlerts((prev) => [alertData, ...prev.filter(a => a._id !== alertData._id)]);
+      showRealtimeAlertNotification(alertData);
     };
 
     const handleSosStatusUpdate = () => {

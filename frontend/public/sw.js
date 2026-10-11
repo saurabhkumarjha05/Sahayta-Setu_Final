@@ -2,7 +2,7 @@
 // Offline SOS Queue Synchronization, Web Push Alerts & Emergency Audio Precaching
 
 const CACHE_PREFIX = "sahayta-";
-const CACHE_NAME = "sahayta-assets-v4";
+const CACHE_NAME = "sahayta-assets-v5";
 const DB_NAME = "sosDB";
 const QUEUE_STORE = "emergencySOSQueue";
 const ALERTS_STORE = "alertsCacheStore";
