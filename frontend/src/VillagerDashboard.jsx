@@ -37,8 +37,8 @@ function VillagerDashboard({ user, onLogout }) {
   const [alerts, setAlerts] = useState([]);
 
   // Location selector state
-  const [selectedState, setSelectedState] = useState(user?.state || DEFAULT_STATE);
-  const [selectedDistrict, setSelectedDistrict] = useState(user?.district || DEFAULT_DISTRICT);
+  const selectedState = user?.state || DEFAULT_STATE;
+  const selectedDistrict = user?.district || DEFAULT_DISTRICT;
   const [isGpsActive, setIsGpsActive] = useState(false);
   const [userPos, setUserPos] = useState(() => {
     const coords = findDistrictCoordinates(user?.district || DEFAULT_DISTRICT, user?.state || DEFAULT_STATE);
@@ -59,14 +59,6 @@ function VillagerDashboard({ user, onLogout }) {
       );
     }
   }, []);
-
-  const handleLocationChange = ({ state, district, coordinates }) => {
-    setSelectedState(state);
-    setSelectedDistrict(district);
-    if (coordinates && Number.isFinite(coordinates.lat) && Number.isFinite(coordinates.lng)) {
-      setUserPos([coordinates.lat, coordinates.lng]);
-    }
-  };
 
   const handleLocateMe = () => {
     if (navigator.geolocation) {
@@ -401,35 +393,18 @@ function VillagerDashboard({ user, onLogout }) {
       </header>
 
       {/* LOCATION SELECTION BAR */}
-      <div style={{
-        backgroundColor: '#f8fafc',
-        borderBottom: '1px solid #e2e8f0',
-        padding: '12px 24px',
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '16px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '1 1 300px' }}>
-          <span style={{ fontSize: '0.85rem', color: '#475569', fontWeight: '700' }}>📍 Active Region:</span>
+      <div className="villager-region-bar">
+        <div className="villager-region-fields">
+          <span className="villager-region-label">📍 Active Region</span>
           <LocationSelector
             selectedState={selectedState}
             selectedDistrict={selectedDistrict}
-            onChange={handleLocationChange}
+            disabled
             showLabels={false}
           />
         </div>
 
-        <div style={{
-          fontSize: '0.8rem',
-          fontWeight: '600',
-          color: isGpsActive ? '#15803d' : '#b45309',
-          backgroundColor: isGpsActive ? '#f0fdf4' : '#fffbe6',
-          padding: '6px 12px',
-          borderRadius: '20px',
-          border: `1px solid ${isGpsActive ? '#bbf7d0' : '#fef08a'}`
-        }}>
+        <div className={`villager-gps-status ${isGpsActive ? 'gps-active' : ''}`}>
           {isGpsActive ? '📍 EXACT GPS ACTIVE' : `⚠️ USING APPROXIMATE DISTRICT CENTER (${selectedDistrict})`}
         </div>
       </div>
