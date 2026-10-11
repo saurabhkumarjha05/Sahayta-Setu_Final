@@ -265,7 +265,19 @@ function NgoDashboard({ user, onLogout }) {
       {/* HEADER */}
       <header className="ngo-header">
         <div className="ngo-brand">
-          <div className="ngo-logo">🛡️</div>
+          <div className="villager-brand">
+          <img
+            className="villager-brand-icon"
+            src="/apple-touch-icon.png"
+            alt="Sahayta Setu logo"
+            width="38"
+            height="38"
+          />
+          <div>
+            <h2>SAHAYTA SETU</h2>
+            <span>Disaster Response Network</span>
+          </div>
+        </div>
           <div>
             <h2>SAHAYTA SETU</h2>
             <span>NGO Response Control</span>

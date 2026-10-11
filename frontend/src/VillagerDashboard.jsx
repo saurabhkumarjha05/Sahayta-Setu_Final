@@ -346,7 +346,13 @@ function VillagerDashboard({ user, onLogout }) {
       {/* HEADER */}
       <header className="villager-header">
         <div className="villager-brand">
-          <div className="villager-brand-icon">🛡️</div>
+          <img
+            className="villager-brand-icon"
+            src="/apple-touch-icon.png"
+            alt="Sahayta Setu logo"
+            width="38"
+            height="38"
+          />
           <div>
             <h2>SAHAYTA SETU</h2>
             <span>Disaster Response Network</span>
@@ -958,7 +964,10 @@ function VillagerDashboard({ user, onLogout }) {
 
         {/* FOOTER */}
         <footer className="villager-footer">
-          <span>🛡️ SAHAYTA SETU</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <img src="/apple-touch-icon.png" alt="" width="18" height="18" />
+            SAHAYTA SETU
+          </span>
           <span>Emergency Assistance & Disaster Response Network</span>
           <span>System Online ●</span>
         </footer>

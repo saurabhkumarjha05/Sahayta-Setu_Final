@@ -24,7 +24,7 @@ export default function AuthorityAnalyticsDashboard({
   const [exportingPdf, setExportingPdf] = useState(false);
   const [referenceTime, setReferenceTime] = useState(null);
 
-  // TinyFish AI Telemetry State
+  // TinyFish Search results
   const [tinyFishAlerts, setTinyFishAlerts] = useState([]);
   const [loadingTinyFish, setLoadingTinyFish] = useState(false);
   const [tinyFishError, setTinyFishError] = useState('');

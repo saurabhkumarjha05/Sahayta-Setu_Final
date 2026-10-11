@@ -1,5 +1,6 @@
 const http = require('http');
 const mongoose = require('mongoose');
+process.env.NODE_ENV = 'test';
 const { app, memoryStore } = require('./server');
 const { createToken } = require('./services/auth');
 

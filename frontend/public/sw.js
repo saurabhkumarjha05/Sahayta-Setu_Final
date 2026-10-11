@@ -2,7 +2,7 @@
 // Offline SOS Queue Synchronization, Web Push Alerts & Emergency Audio Precaching
 
 const CACHE_PREFIX = "sahayta-";
-const CACHE_NAME = "sahayta-assets-v3";
+const CACHE_NAME = "sahayta-assets-v4";
 const DB_NAME = "sosDB";
 const QUEUE_STORE = "emergencySOSQueue";
 const ALERTS_STORE = "alertsCacheStore";
@@ -15,7 +15,6 @@ const BACKEND_URL = `${BACKEND_BASE}/api/sos`;
 const PRECACHE_URLS = [
   "/",
   "/index.html",
-  "/favicon.svg",
   "/logo_hackathon.jpeg",
   "/logo-192.png",
   "/logo-512.png",

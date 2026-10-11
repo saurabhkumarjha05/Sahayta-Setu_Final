@@ -12,15 +12,25 @@ const MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 const SEEN_KEY = "sahaytaSeenAlerts";
 
+function alertKey(alert) {
+  return String(
+    alert?._id ||
+    alert?.id ||
+    `${alert?.createdAt || ""}|${alert?.riskLevel || ""}|${alert?.district || ""}|${alert?.village || ""}|${alert?.message || ""}`
+  );
+}
+
 function loadSeen() {
   try {
-    return JSON.parse(localStorage.getItem(SEEN_KEY)) || [];
+    const stored = JSON.parse(localStorage.getItem(SEEN_KEY));
+    return Array.isArray(stored) ? stored : [];
   } catch {
     return [];
   }
 }
 
-function markSeen(id) {
+function markSeen(alert) {
+  const id = alertKey(alert);
   const seen = loadSeen();
   if (!seen.includes(id)) {
     localStorage.setItem(SEEN_KEY, JSON.stringify([...seen, id].slice(-50)));
@@ -126,10 +136,10 @@ function DangerAlert({ alerts, user, onFindShelter, onSendSOS }) {
     (alert) =>
       DANGER_LEVELS.includes(alert.riskLevel) &&
       isRecent(alert) &&
-      !seen.includes(alert._id) &&
+      !seen.includes(alertKey(alert)) &&
       isForMyVillage(alert, user)
   );
-  const activeId = active?._id;
+  const activeId = active ? alertKey(active) : null;
 
   const stopVoice = () => {
     if (voiceRef.current) {
@@ -224,8 +234,10 @@ function DangerAlert({ alerts, user, onFindShelter, onSendSOS }) {
   };
 
   const close = (next) => {
-    if (active?._id) markSeen(active._id);
-    setSeen(loadSeen());
+    if (active) {
+      markSeen(active);
+      setSeen((current) => [...new Set([...current, alertKey(active)])].slice(-50));
+    }
     stopVoice();
     stopSirenRef.current?.();
     stopSirenRef.current = null;

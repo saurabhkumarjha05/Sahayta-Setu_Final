@@ -109,6 +109,15 @@ function requireOtpUnlessDemo(req, res, next) {
 // In-memory test store harness (used only when NODE_ENV=test and disconnected from MongoDB)
 const isDbMode = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1);
 
+function requireDatabase(res) {
+  if (isDbMode() || process.env.NODE_ENV === 'test') return true;
+  res.status(503).json({
+    error: 'Authentication services are temporarily unavailable because the database is not connected. Please try again shortly.',
+    code: 'DATABASE_UNAVAILABLE'
+  });
+  return false;
+}
+
 const memoryStore = {
   shelters: [],
   sos: [],
@@ -317,6 +326,7 @@ app.post('/api/auth/citizen/lookup', requireOtpUnlessDemo, async (req, res) => {
   if (!phone) {
     return res.status(400).json({ error: 'Please provide a valid 10-digit Indian mobile number', code: 'INVALID_PHONE' });
   }
+  if (!requireDatabase(res)) return;
 
   const phoneCheck = limiter.check(`phone:${phone}:lookup`, 15, 10 * 60 * 1000);
   if (!phoneCheck.allowed) {
@@ -367,6 +377,7 @@ app.post('/api/auth/citizen/login', requireOtpUnlessDemo, async (req, res) => {
   if (!phone) {
     return res.status(400).json({ error: 'Please provide a valid 10-digit Indian mobile number', code: 'INVALID_PHONE' });
   }
+  if (!requireDatabase(res)) return;
 
   try {
     let user = null;
@@ -446,6 +457,7 @@ app.post('/api/auth/citizen/register', requireOtpUnlessDemo, async (req, res) =>
   }
 
   const { stateCode, districtCode, village, state, district } = req.body;
+  if (!requireDatabase(res)) return;
   const validation = validateAuthInput({
     name: rawName,
     phone,
@@ -589,6 +601,7 @@ app.post('/api/auth/request-otp', async (req, res) => {
   if (!phone) {
     return res.status(400).json({ error: 'Please give a valid 10-digit Indian mobile number' });
   }
+  if (!requireDatabase(res)) return;
 
   // Rate limit: 3 per phone per 10 minutes
   const phoneCheck = limiter.check(`phone:${phone}`, 3, 10 * 60 * 1000);
@@ -664,6 +677,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   if (!phone || !code) {
     return res.status(400).json({ error: 'Please provide mobile number and verification code' });
   }
+  if (!requireDatabase(res)) return;
 
   try {
     let otp = null;
@@ -683,9 +697,9 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         await otp.save();
         return res.status(400).json({ error: 'Wrong code' });
       }
-    } else {
-      // Memory fallback for tests
-      if (code !== '123456' && code.length !== 6) {
+    } else if (process.env.NODE_ENV === 'test') {
+      // Memory fallback is test-only; production must verify a persisted OTP.
+      if (code.length !== 6) {
         return res.status(400).json({ error: 'Wrong code' });
       }
     }
@@ -846,6 +860,7 @@ app.post('/api/auth/register-org', async (req, res) => {
   if (!sanitized.email) return res.status(400).json({ error: 'Official email address is required' });
   if (!sanitized.phone) return res.status(400).json({ error: 'Official mobile number is required' });
   if (!password || String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+  if (!requireDatabase(res)) return;
 
   let role = 'ngo';
   let authorityLevel = null;
@@ -1000,6 +1015,7 @@ app.post('/api/auth/login', async (req, res) => {
   if (!cleanEmail || !password) {
     return res.status(400).json({ error: 'Please provide both email and password' });
   }
+  if (!requireDatabase(res)) return;
 
   // Rate limiting: 20 per IP per 15 min
   const ipCheck = limiter.check(`ip:${req.ip}:login`, 20, 15 * 60 * 1000);
@@ -1372,6 +1388,12 @@ app.get('/api/sos/:id/intelligence-report', requireRole('control', 'super_admin'
 });
 
 app.get('/api/risk-zones', async (req, res) => {
+  if (!isDbMode()) {
+    return res.status(503).json({
+      error: 'Live risk zones are temporarily unavailable because the database is not connected.',
+      code: 'DATABASE_UNAVAILABLE'
+    });
+  }
   try {
     const filter = {};
     if (req.query.state) filter.state = new RegExp(`^${String(req.query.state).trim()}$`, 'i');

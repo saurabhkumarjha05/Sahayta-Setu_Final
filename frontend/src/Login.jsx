@@ -354,15 +354,24 @@ function Login({ onLogin }) {
           email: email.trim(),
           phone: cleanPhone,
           password: orgPassword,
-          stateCode: orgState,
-          districtCode: orgDistrict,
+          state: orgState,
+          district: orgDistrict,
           blockCode: blockCode.trim(),
           panchayatId: panchayatId.trim(),
           registrationNumber: registrationNumber.trim(),
         }),
       });
 
-      if (data && data.token && data.user) {
+      if (data?.user?.verificationStatus && data.user.verificationStatus !== "VERIFIED") {
+        setSuccessMsg(
+          data.message ||
+            "Registration submitted successfully. Your account will be available after administrator verification."
+        );
+        setOrgView("login");
+        setPassword("");
+        setOrgPassword("");
+        setConfirmPassword("");
+      } else if (data && data.token && data.user) {
         onLogin({ role: data.user.role, token: data.token, user: data.user });
       } else {
         setSuccessMsg(data.message || "Registration submitted. An administrator will verify your credentials shortly.");
