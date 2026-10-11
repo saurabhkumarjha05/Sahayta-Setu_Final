@@ -1664,6 +1664,15 @@ button {
   margin-left: 5px;
 }
 
+.villager-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
 
 /* MAIN */
 
@@ -2373,6 +2382,11 @@ button {
   .villager-header {
     height: 62px;
     padding: 0 14px;
+    gap: 8px;
+  }
+
+  .villager-header-actions {
+    gap: 6px;
   }
 
   .villager-profile div:nth-child(2) {

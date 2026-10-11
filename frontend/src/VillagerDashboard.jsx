@@ -373,7 +373,7 @@ function VillagerDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="villager-header-actions">
           <LanguageSwitcher />
           <ProfileMenu
             className="villager-profile"

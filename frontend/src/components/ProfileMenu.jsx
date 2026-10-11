@@ -25,6 +25,7 @@ function ProfileMenu({ className, avatarClassName, initials, name, subtitle, pho
         className="profile-menu-trigger"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
+        aria-haspopup="menu"
       >
         <div className={avatarClassName}>{initials}</div>
 
@@ -43,7 +44,16 @@ function ProfileMenu({ className, avatarClassName, initials, name, subtitle, pho
             {phone && <small>{phone}</small>}
           </div>
 
-          <button type="button" className="profile-logout" onClick={onLogout}>
+          <button
+            type="button"
+            className="profile-logout"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setOpen(false);
+              onLogout?.();
+            }}
+          >
             ⎋ Log out
           </button>
         </div>
