@@ -217,7 +217,7 @@ function VillagerDashboard({ user, onLogout }) {
 
   const handleRemoveResolvedSOS = async (sos) => {
     const id = sos?._id || sos?.clientIncidentId;
-    if (!id || sos.status !== "Resolved") return;
+    if (!id || !isResolved(sos)) return;
     try {
       await apiFetch(`/api/sos/${encodeURIComponent(id)}/citizen-history`, { method: "DELETE" });
       setMyRequests((current) => current.filter((item) => (item._id || item.clientIncidentId) !== id));
@@ -272,8 +272,9 @@ function VillagerDashboard({ user, onLogout }) {
     }
   };
 
-  const activeRequest = myRequests.find((sos) => sos.status !== "Resolved");
-  const resolvedHistory = myRequests.filter((sos) => sos.status === "Resolved");
+  const isResolved = (sos) => String(sos?.status || "").trim().toLowerCase() === "resolved";
+  const activeRequest = myRequests.find((sos) => !isResolved(sos));
+  const resolvedHistory = myRequests.filter(isResolved);
   const hasActiveSOS = Boolean(activeRequest) || pendingOffline > 0;
 
   // Nearby resources sorted by distance

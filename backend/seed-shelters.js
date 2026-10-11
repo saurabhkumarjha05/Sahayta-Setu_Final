@@ -22,7 +22,7 @@ async function seed() {
     await Shelter.findOneAndUpdate(
       { name: shelter.name },
       { ...shelter, status },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
     console.log(`✓ ${shelter.name} (${shelter.currentOccupancy}/${shelter.capacity}, ${status})`);
   }

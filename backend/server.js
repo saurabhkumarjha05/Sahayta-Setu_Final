@@ -2657,7 +2657,7 @@ app.delete('/api/sos/:id/citizen-history', requireAuth, async (req, res) => {
     const sos = await SOS.findOneAndUpdate(
       filter,
       { $set: { citizenHiddenAt: new Date() } },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!sos) return res.status(404).json({ error: 'Only your resolved SOS history can be removed.' });
 
@@ -2961,7 +2961,7 @@ app.patch('/api/sos/:id/assign', requireRole('ngo', 'control'), requireVerified,
     const sos = await SOS.findOneAndUpdate(
       { ...filter, status: 'Pending' },
       updateFields,
-      { new: true }
+      { returnDocument: 'after' }
     ).populate('assignedTo', 'name phone district location');
 
     if (!sos) {
@@ -3176,7 +3176,7 @@ app.post('/api/evacuation', requireRole('villager'), async (req, res) => {
         needsReview: false,
         reviewReason: null
       },
-      { upsert: true, new: true, runValidators: true }
+      { upsert: true, returnDocument: 'after', runValidators: true }
     );
 
     res.json(report);

@@ -105,9 +105,11 @@ function App() {
   };
 
   const handleLogout = () => {
-    apiFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     clearSession();
     setSession(null);
+    apiFetch("/api/auth/logout", { method: "POST" }).catch((error) => {
+      console.warn("Logout audit request failed after local logout:", error.message);
+    });
   };
 
   useEffect(() => {

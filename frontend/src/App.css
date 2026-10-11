@@ -2452,7 +2452,7 @@ button {
     font-size: 0.75rem;
   }
 
-  .villager-profile div:nth-child(2) {
+  .villager-profile .profile-menu-trigger > div:nth-child(2) {
     display: none;
   }
 
