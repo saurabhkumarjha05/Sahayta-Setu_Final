@@ -215,6 +215,17 @@ function VillagerDashboard({ user, onLogout }) {
     fetchMyRequests();
   };
 
+  const handleRemoveResolvedSOS = async (sos) => {
+    const id = sos?._id || sos?.clientIncidentId;
+    if (!id || sos.status !== "Resolved") return;
+    try {
+      await apiFetch(`/api/sos/${encodeURIComponent(id)}/citizen-history`, { method: "DELETE" });
+      setMyRequests((current) => current.filter((item) => (item._id || item.clientIncidentId) !== id));
+    } catch (error) {
+      console.warn("Could not remove resolved SOS history:", error.message);
+    }
+  };
+
   const handleManualSync = async () => {
     setSyncingManual(true);
     setSyncResultMsg("");
@@ -262,6 +273,7 @@ function VillagerDashboard({ user, onLogout }) {
   };
 
   const activeRequest = myRequests.find((sos) => sos.status !== "Resolved");
+  const resolvedHistory = myRequests.filter((sos) => sos.status === "Resolved");
   const hasActiveSOS = Boolean(activeRequest) || pendingOffline > 0;
 
   // Nearby resources sorted by distance
@@ -967,6 +979,33 @@ function VillagerDashboard({ user, onLogout }) {
             </div>
           )}
         </section>
+
+        {resolvedHistory.length > 0 && (
+          <section className="villager-panel citizen-history-panel">
+            <div className="villager-panel-heading">
+              <div>
+                <h3>MY RESOLVED SOS HISTORY</h3>
+                <p>Only you can hide these entries. Authority and NGO operational history remains unchanged.</p>
+              </div>
+            </div>
+            <div className="citizen-history-list">
+              {resolvedHistory.map((sos) => {
+                const id = sos._id || sos.clientIncidentId;
+                return (
+                  <div className="citizen-history-row" key={id}>
+                    <div>
+                      <strong>{sos.incidentType || sos.type || "Emergency report"}</strong>
+                      <small>{sos.clientIncidentId || sos._id} · Resolved</small>
+                    </div>
+                    <button type="button" onClick={() => handleRemoveResolvedSOS(sos)}>
+                      🗑️ Remove from my history
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* FOOTER */}
         <footer className="villager-footer">

@@ -1627,7 +1627,7 @@ button {
 }
 
 .villager-profile {
-  display: flex;
+  display: block;
   align-items: center;
   gap: 8px;
   padding: 5px 9px 5px 5px;
@@ -1662,6 +1662,48 @@ button {
 .villager-profile > span {
   color: #7d9298;
   margin-left: 5px;
+}
+
+.citizen-history-panel {
+  margin-top: 20px;
+}
+
+.citizen-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.citizen-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dbe4e7;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.citizen-history-row strong,
+.citizen-history-row small {
+  display: block;
+}
+
+.citizen-history-row small {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.citizen-history-row button {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #b91c1c;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .villager-header-actions {
@@ -2387,10 +2429,40 @@ button {
 
   .villager-header-actions {
     gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .villager-brand {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .villager-brand > div {
+    display: none;
+  }
+
+  .ss-lang-switcher {
+    padding: 2px;
+  }
+
+  .ss-lang-btn {
+    min-width: 40px;
+    min-height: 38px;
+    padding: 6px 8px;
+    font-size: 0.75rem;
   }
 
   .villager-profile div:nth-child(2) {
     display: none;
+  }
+
+  .citizen-history-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .citizen-history-row button {
+    width: 100%;
   }
 
   .villager-main {

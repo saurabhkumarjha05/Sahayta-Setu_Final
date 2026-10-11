@@ -38,6 +38,7 @@ const auditLogSchema = new mongoose.Schema(
         'SOS_ASSIGNED',
         'SOS_DETAILS_UPDATED',
         'SOS_STATUS_UPDATED',
+        'SOS_CITIZEN_HIDDEN',
         'ALERT_CREATED',
         'ALERT_RETRANSMITTED',
         'ALERT_REVOKED',

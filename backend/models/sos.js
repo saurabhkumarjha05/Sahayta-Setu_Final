@@ -115,6 +115,7 @@ const sosSchema = new mongoose.Schema({
 
   // Reporter details
   reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  citizenHiddenAt: { type: Date, default: null },
   contactName: { type: String, default: null },
   contactPhone: { type: String, default: null }
 });

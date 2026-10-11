@@ -2608,15 +2608,70 @@ app.get('/api/sos/mine', requireAuth, async (req, res) => {
   try {
     if (!isDbMode()) {
       const mySos = memoryStore.sos.filter(s =>
-        !s.reportedBy || s.reportedBy === req.user.id || req.user.role === 'villager'
+        !s.citizenHiddenAt &&
+        (!s.reportedBy || s.reportedBy === req.user.id || req.user.role === 'villager')
       );
       return res.json(mySos);
     }
 
-    const requests = await SOS.find({ reportedBy: req.user.id })
+    const requests = await SOS.find({ reportedBy: req.user.id, citizenHiddenAt: null })
       .sort({ timestamp: -1 })
       .populate('assignedTo', 'name phone district');
     res.json(requests);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// A citizen may hide a resolved SOS from their own history without deleting
+// the authoritative operational record used by Authority and NGO dashboards.
+app.delete('/api/sos/:id/citizen-history', requireAuth, async (req, res) => {
+  if (req.user.role !== 'villager') {
+    return res.status(403).json({ error: 'Only citizen accounts can remove personal SOS history.' });
+  }
+
+  try {
+    const filter = {
+      reportedBy: req.user.id,
+      status: 'Resolved',
+      citizenHiddenAt: null
+    };
+    if (mongoose.isValidObjectId(req.params.id)) {
+      filter._id = req.params.id;
+    } else {
+      filter.clientIncidentId = req.params.id;
+    }
+
+    if (!isDbMode()) {
+      const item = memoryStore.sos.find((sos) =>
+        (s._id === req.params.id || sos.clientIncidentId === req.params.id) &&
+        s.reportedBy === req.user.id &&
+        s.status === 'Resolved' &&
+        !s.citizenHiddenAt
+      );
+      if (!item) return res.status(404).json({ error: 'Resolved SOS history entry not found.' });
+      item.citizenHiddenAt = new Date().toISOString();
+      return res.json({ success: true, hidden: true });
+    }
+
+    const sos = await SOS.findOneAndUpdate(
+      filter,
+      { $set: { citizenHiddenAt: new Date() } },
+      { new: true }
+    );
+    if (!sos) return res.status(404).json({ error: 'Only your resolved SOS history can be removed.' });
+
+    await logAuditEvent({
+      actorId: req.user.id,
+      actorName: req.user.name,
+      actorRole: req.user.role,
+      action: 'SOS_CITIZEN_HIDDEN',
+      targetId: sos._id,
+      targetType: 'SOS',
+      jurisdiction: { state: sos.state, district: sos.district },
+      details: { reason: 'Citizen removed resolved item from personal history' }
+    });
+    res.json({ success: true, hidden: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
